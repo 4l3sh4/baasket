@@ -8,12 +8,12 @@ from uuid import uuid4
 
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required, login_user, logout_user
-from sqlalchemy import case, or_
+from sqlalchemy import case, or_, text
 from werkzeug.utils import secure_filename
 
 from catalog import ListingFactory, _build_art, build_seeded_catalog
 from extensions import db, login_manager
-from models import ListingModel, OfferModel, OrderItemModel, OrderModel, User, serialize_tags
+from models import Item, Offer, OrderItemModel, OrderModel, User, serialize_tags, ChatSession, Message
 from offers import OfferBoard
 from payment import build_payment_gateway
 
@@ -54,7 +54,7 @@ def _create_cart_lines() -> tuple[list[dict[str, object]], Decimal]:
 	subtotal = Decimal("0.00")
 
 	for listing_id, quantity in counts.items():
-		listing = db.session.get(ListingModel, listing_id)
+		listing = db.session.get(Item, listing_id)
 		if listing is None:
 			continue
 		line_total = Decimal(listing.price) * quantity
@@ -66,51 +66,51 @@ def _create_cart_lines() -> tuple[list[dict[str, object]], Decimal]:
 
 def _sort_kind_expression():
 	return case(
-		(ListingModel.kind == "featured", 0),
-		(ListingModel.kind == "fresh", 1),
-		(ListingModel.kind == "limited", 2),
+		(Item.kind == "featured", 0),
+		(Item.kind == "fresh", 1),
+		(Item.kind == "limited", 2),
 		else_=3,
 	)
 
 
-def _search_listings(search: str = "", category: str = "") -> list[ListingModel]:
-	query = ListingModel.query
+def _search_listings(search: str = "", category: str = "") -> list[Item]:
+	query = Item.query
 	if category:
-		query = query.filter(ListingModel.category == category)
+		query = query.filter(Item.category == category)
 	if search:
 		pattern = f"%{search}%"
 		query = query.filter(
 			or_(
-				ListingModel.title.ilike(pattern),
-				ListingModel.category.ilike(pattern),
-				ListingModel.condition.ilike(pattern),
-				ListingModel.location.ilike(pattern),
-				ListingModel.description.ilike(pattern),
-				ListingModel.tags_csv.ilike(pattern),
+				Item.title.ilike(pattern),
+				Item.category.ilike(pattern),
+				Item.condition.ilike(pattern),
+				Item.location.ilike(pattern),
+				Item.description.ilike(pattern),
+				Item.tags_csv.ilike(pattern),
 			)
 		)
-	return query.order_by(_sort_kind_expression(), ListingModel.created_at.desc()).all()
+	return query.order_by(_sort_kind_expression(), Item.created_at.desc()).all()
 
 
-def _featured_listings(limit: int = 4) -> list[ListingModel]:
+def _featured_listings(limit: int = 4) -> list[Item]:
 	return (
-		ListingModel.query.order_by(_sort_kind_expression(), ListingModel.created_at.desc())
+		Item.query.order_by(_sort_kind_expression(), Item.created_at.desc())
 		.limit(limit)
 		.all()
 	)
 
 
-def _related_listings(listing: ListingModel, limit: int = 3) -> list[ListingModel]:
+def _related_listings(listing: Item, limit: int = 3) -> list[Item]:
 	query = (
-		ListingModel.query.filter(ListingModel.id != listing.id, ListingModel.category == listing.category)
-		.order_by(_sort_kind_expression(), ListingModel.created_at.desc())
+		Item.query.filter(Item.id != listing.id, Item.category == listing.category)
+		.order_by(_sort_kind_expression(), Item.created_at.desc())
 		.limit(limit)
 	)
 	results = query.all()
 	if len(results) < limit:
 		fallback = (
-			ListingModel.query.filter(ListingModel.id != listing.id)
-			.order_by(_sort_kind_expression(), ListingModel.created_at.desc())
+			Item.query.filter(Item.id != listing.id)
+			.order_by(_sort_kind_expression(), Item.created_at.desc())
 			.all()
 		)
 		for candidate in fallback:
@@ -122,7 +122,7 @@ def _related_listings(listing: ListingModel, limit: int = 3) -> list[ListingMode
 
 
 def _listing_stats_for_user(user_id: int) -> dict[str, int]:
-	listings = ListingModel.query.filter_by(seller_id=user_id).all()
+	listings = Item.query.filter_by(seller_id=user_id).all()
 	offer_count = sum(len(listing.offers) for listing in listings)
 	return {
 		"listings": len(listings),
@@ -132,9 +132,9 @@ def _listing_stats_for_user(user_id: int) -> dict[str, int]:
 
 def _sales_history_for_user(user_id: int) -> list[dict[str, object]]:
 	order_items = (
-		OrderItemModel.query.join(ListingModel, OrderItemModel.listing_id == ListingModel.id)
+		OrderItemModel.query.join(Item, OrderItemModel.listing_id == Item.id)
 		.join(OrderModel, OrderItemModel.order_id == OrderModel.id)
-		.filter(ListingModel.seller_id == user_id)
+		.filter(Item.seller_id == user_id)
 		.order_by(OrderModel.created_at.desc(), OrderItemModel.id.desc())
 		.all()
 	)
@@ -142,7 +142,7 @@ def _sales_history_for_user(user_id: int) -> list[dict[str, object]]:
 		{
 			"order": item.order,
 			"item": item,
-			"listing": db.session.get(ListingModel, item.listing_id),
+			"listing": db.session.get(Item, item.listing_id),
 		}
 		for item in order_items
 	]
@@ -157,11 +157,11 @@ def _seed_database() -> None:
 	else:
 		demo_user = User.query.filter_by(username="baasket").first() or User.query.first()
 
-	if ListingModel.query.count() == 0 and demo_user is not None:
+	if Item.query.count() == 0 and demo_user is not None:
 		seed_repository = build_seeded_catalog(ListingFactory())
 		for seed_listing in seed_repository.all():
 			db.session.add(
-				ListingModel(
+				Item(
 					seller_id=demo_user.id,
 					title=seed_listing.title,
 					category=seed_listing.category,
@@ -208,6 +208,72 @@ def create_app() -> Flask:
 		db.create_all()
 		_seed_database()
 
+		# Ensure chat_session table has the new columns added to the model
+		def _ensure_chat_session_columns():
+			inspector = db.session.execute(text("PRAGMA table_info('chat_session')")).all()
+			cols = {row[1] for row in inspector} if inspector else set()
+			to_add = []
+			for col in ("buyer_id", "seller_id", "listing_id"):
+				if col not in cols:
+					to_add.append(col)
+			if not to_add:
+				return
+			# SQLite supports simple ALTER TABLE ADD COLUMN statements for new columns
+			for col in to_add:
+				try:
+					db.session.execute(text(f"ALTER TABLE chat_session ADD COLUMN {col} INTEGER"))
+					db.session.commit()
+				except Exception:
+					db.session.rollback()
+
+		_ensure_chat_session_columns()
+
+		# Lightweight schema updates for newly added model fields
+		def _ensure_schema_columns():
+			table_columns = {
+				"user": [
+					("legal_name", "TEXT"),
+					("ic_number", "TEXT"),
+					("home_address", "TEXT"),
+					("city", "TEXT"),
+					("region", "TEXT"),
+					("phone_number", "TEXT"),
+					("country", "TEXT"),
+					("last_seen", "TEXT"),
+				],
+				"listing_model": [
+					("quantity", "INTEGER"),
+					("sku", "TEXT"),
+					("is_active", "INTEGER"),
+				],
+				"offer": [
+					("buyer_id", "INTEGER"),
+					("status", "TEXT"),
+				],
+				"cart": [
+					("items_json", "TEXT"),
+				],
+				"payment": [
+					("buyer_id", "INTEGER"),
+					("order_id", "INTEGER"),
+					("gateway_reference", "TEXT"),
+					("provider", "TEXT"),
+				],
+			}
+
+			for table, cols in table_columns.items():
+				inspector = db.session.execute(text(f"PRAGMA table_info('{table}')")).all()
+				existing = {row[1] for row in inspector} if inspector else set()
+				for col_name, col_type in cols:
+					if col_name not in existing:
+						try:
+							db.session.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_type}"))
+							db.session.commit()
+						except Exception:
+							db.session.rollback()
+
+		_ensure_schema_columns()
+
 	@app.get("/")
 	def index() -> str:
 		search = request.args.get("q", "").strip()
@@ -221,21 +287,21 @@ def create_app() -> Flask:
 			category=category,
 			listings=listings,
 			featured=_featured_listings(limit=4),
-			categories=tuple(sorted({listing.category for listing in ListingModel.query.all()})),
+			categories=tuple(sorted({listing.category for listing in Item.query.all()})),
 			activity_feed=offer_board.recent_activity(limit=5),
-			listing_count=ListingModel.query.count(),
+			listing_count=Item.query.count(),
 		)
 
 	@app.get("/listing/<int:listing_id>")
 	def listing_detail(listing_id: int) -> str:
-		listing = db.session.get(ListingModel, listing_id)
+		listing = db.session.get(Item, listing_id)
 		if listing is None:
 			flash("That listing is no longer available.", "warning")
 			return redirect(url_for("index"))
 
 		offers = (
-			OfferModel.query.filter_by(listing_id=listing.id)
-			.order_by(OfferModel.created_at.desc())
+			Offer.query.filter_by(listing_id=listing.id)
+			.order_by(Offer.created_at.desc())
 			.all()
 		)
 		return render_template(
@@ -247,8 +313,9 @@ def create_app() -> Flask:
 		)
 
 	@app.post("/listing/<int:listing_id>/cart")
+	@login_required
 	def add_to_cart(listing_id: int):
-		listing = db.session.get(ListingModel, listing_id)
+		listing = db.session.get(Item, listing_id)
 		if listing is None:
 			flash("The item you tried to add could not be found.", "warning")
 			return redirect(url_for("index"))
@@ -284,7 +351,7 @@ def create_app() -> Flask:
 				flash("Enter a valid asking price.", "warning")
 				return redirect(url_for("sell"))
 
-			listing = ListingModel(
+			listing = Item(
 				seller_id=current_user.id,
 				title=title,
 				category=category,
@@ -305,15 +372,17 @@ def create_app() -> Flask:
 		return render_template(
 			"sell.html",
 			title="Sell on Baasket",
-			categories=tuple(sorted({listing.category for listing in ListingModel.query.all()})),
+			categories=tuple(sorted({listing.category for listing in Item.query.all()})),
 		)
 
 	@app.get("/cart")
+	@login_required
 	def cart_view() -> str:
 		lines, subtotal = _create_cart_lines()
 		return render_template("cart.html", title="Your Basket | Baasket", lines=lines, subtotal=subtotal)
 
 	@app.post("/cart/remove/<int:listing_id>")
+	@login_required
 	def remove_from_cart(listing_id: int):
 		cart = list(session.get("cart", []))
 		try:
@@ -327,6 +396,7 @@ def create_app() -> Flask:
 		return redirect(url_for("cart_view"))
 
 	@app.post("/checkout")
+	@login_required
 	def checkout():
 		lines, subtotal = _create_cart_lines()
 		if not lines:
@@ -385,29 +455,106 @@ def create_app() -> Flask:
 		)
 
 	@app.post("/listing/<int:listing_id>/offer")
+	@login_required
 	def submit_offer(listing_id: int):
-		listing = db.session.get(ListingModel, listing_id)
+		# Deprecated: offers should be created inside chat sessions.
+		flash("Please start a chat with the seller to make offers.", "info")
+		return redirect(url_for("listing_detail", listing_id=listing_id))
+
+	@app.post("/listing/<int:listing_id>/chat")
+	@login_required
+	def start_chat(listing_id: int):
+		listing = db.session.get(Item, listing_id)
 		if listing is None:
-			flash("That listing cannot receive offers right now.", "warning")
+			flash("That listing is no longer available.", "warning")
+			return redirect(url_for("index"))
+		if listing.seller_id == current_user.id:
+			flash("You cannot start a chat on your own listing.", "warning")
+			return redirect(url_for("listing_detail", listing_id=listing.id))
+
+		# Check for existing chat between these participants for this listing
+		existing = (
+			ChatSession.query.filter_by(listing_id=listing.id, buyer_id=current_user.id, seller_id=listing.seller_id)
+			.first()
+		)
+		if existing:
+			return redirect(url_for("chat_view", chat_id=existing.chatID))
+
+		from uuid import uuid4
+		chat = ChatSession(chatID=uuid4().hex, creator_id=current_user.id, buyer_id=current_user.id, seller_id=listing.seller_id, listing_id=listing.id)
+		db.session.add(chat)
+		db.session.commit()
+		flash("Chat started with the seller.", "success")
+		return redirect(url_for("chat_view", chat_id=chat.chatID))
+
+	@app.get("/chat/<string:chat_id>")
+	@login_required
+	def chat_view(chat_id: str):
+		chat = ChatSession.query.filter_by(chatID=chat_id).first()
+		if chat is None:
+			flash("Chat session not found.", "warning")
+			return redirect(url_for("index"))
+		if current_user.id not in (chat.buyer_id, chat.seller_id):
+			flash("You are not a participant in this chat.", "warning")
 			return redirect(url_for("index"))
 
-		buyer_name = request.form.get("buyer_name", "Anonymous").strip() or "Anonymous"
-		message = request.form.get("message", "").strip()
-		amount_text = request.form.get("amount", "").strip()
+		messages = Message.query.filter_by(session_id=chat.chatID).order_by(Message.timestamp.asc()).all()
+		listing = db.session.get(Item, chat.listing_id) if chat.listing_id else None
+		return render_template(
+			"chat.html",
+			title="Chat",
+			chat=chat,
+			messages=messages,
+			listing=listing,
+		)
 
+	@app.post("/chat/<string:chat_id>/message")
+	@login_required
+	def post_message(chat_id: str):
+		chat = ChatSession.query.filter_by(chatID=chat_id).first()
+		if chat is None or current_user.id not in (chat.buyer_id, chat.seller_id):
+			flash("Invalid chat session.", "warning")
+			return redirect(url_for("index"))
+		content = request.form.get("content", "").strip()
+		if not content:
+			flash("Message cannot be empty.", "warning")
+			return redirect(url_for("chat_view", chat_id=chat_id))
+		from uuid import uuid4
+		msg = Message(messageID=uuid4().hex, content=content, session_id=chat.chatID, creator_id=current_user.id)
+		db.session.add(msg)
+		db.session.commit()
+		flash("Message sent.", "success")
+		return redirect(url_for("chat_view", chat_id=chat_id))
+
+	@app.post("/chat/<string:chat_id>/offer")
+	@login_required
+	def chat_offer(chat_id: str):
+		chat = ChatSession.query.filter_by(chatID=chat_id).first()
+		if chat is None:
+			flash("Invalid chat session.", "warning")
+			return redirect(url_for("index"))
+		listing = db.session.get(Item, chat.listing_id) if chat.listing_id else None
+		if listing is None:
+			flash("Associated listing not found.", "warning")
+			return redirect(url_for("chat_view", chat_id=chat_id))
+		if current_user.id == listing.seller_id:
+			flash("Sellers cannot make offers on their own listings.", "warning")
+			return redirect(url_for("chat_view", chat_id=chat_id))
+		amount_text = request.form.get("amount", "").strip()
+		message = request.form.get("message", "").strip()
 		try:
 			amount = Decimal(amount_text)
 		except Exception:
 			flash("Enter a valid offer amount.", "warning")
-			return redirect(url_for("listing_detail", listing_id=listing.id))
-
+			return redirect(url_for("chat_view", chat_id=chat_id))
 		if amount <= 0:
 			flash("Offer amounts must be greater than zero.", "warning")
-			return redirect(url_for("listing_detail", listing_id=listing.id))
-
-		offer_board.submit_offer(listing, buyer_name, amount, message)
-		flash("Your offer was shared with the seller and watchers.", "success")
-		return redirect(url_for("listing_detail", listing_id=listing.id))
+			return redirect(url_for("chat_view", chat_id=chat_id))
+		offer = Offer(listing_id=listing.id, buyer_name=current_user.username, buyer_id=current_user.id, amount=amount, message=message)
+		db.session.add(offer)
+		db.session.commit()
+		flash("Your offer was sent in chat.", "success")
+		return redirect(url_for("chat_view", chat_id=chat_id))
 
 	@app.route("/register", methods=["GET", "POST"])
 	def register() -> str:
@@ -473,14 +620,14 @@ def create_app() -> Flask:
 			return redirect(url_for("dashboard"))
 
 		listings = (
-			ListingModel.query.filter_by(seller_id=current_user.id)
-			.order_by(ListingModel.created_at.desc())
+			Item.query.filter_by(seller_id=current_user.id)
+			.order_by(Item.created_at.desc())
 			.all()
 		)
 		recent_offers = (
-			OfferModel.query.join(ListingModel)
-			.filter(ListingModel.seller_id == current_user.id)
-			.order_by(OfferModel.created_at.desc())
+			Offer.query.join(Item)
+			.filter(Item.seller_id == current_user.id)
+			.order_by(Offer.created_at.desc())
 			.limit(12)
 			.all()
 		)
@@ -498,7 +645,7 @@ def create_app() -> Flask:
 	@app.route("/dashboard/listings/<int:listing_id>/edit", methods=["GET", "POST"])
 	@login_required
 	def edit_listing(listing_id: int) -> str:
-		listing = db.session.get(ListingModel, listing_id)
+		listing = db.session.get(Item, listing_id)
 		if listing is None or listing.seller_id != current_user.id:
 			flash("That listing cannot be edited.", "warning")
 			return redirect(url_for("dashboard"))
@@ -535,13 +682,13 @@ def create_app() -> Flask:
 			"edit_listing.html",
 			title="Edit Listing | Baasket",
 			listing=listing,
-			categories=tuple(sorted({item.category for item in ListingModel.query.all()})),
+			categories=tuple(sorted({item.category for item in Item.query.all()})),
 		)
 
 	@app.post("/dashboard/listings/<int:listing_id>/delete")
 	@login_required
 	def delete_listing(listing_id: int):
-		listing = db.session.get(ListingModel, listing_id)
+		listing = db.session.get(Item, listing_id)
 		if listing is None or listing.seller_id != current_user.id:
 			flash("That listing cannot be removed.", "warning")
 			return redirect(url_for("dashboard"))
