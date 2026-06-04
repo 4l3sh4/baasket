@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from flask_login import UserMixin
@@ -18,6 +18,14 @@ class User(db.Model, UserMixin):
     bio = db.Column(db.String(280), nullable=False, default="")
     profile_image = db.Column(db.String(255), nullable=False, default="")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    legal_name = db.Column(db.String(140), nullable=True, default="")
+    ic_number = db.Column(db.String(64), nullable=True, default="")
+    home_address = db.Column(db.String(255), nullable=True, default="")
+    city = db.Column(db.String(80), nullable=True, default="")
+    region = db.Column(db.String(80), nullable=True, default="")
+    phone_number = db.Column(db.String(40), nullable=True, default="")
+    country = db.Column(db.String(80), nullable=True, default="")
+    last_seen = db.Column(db.DateTime, nullable=True)
 
     listings = db.relationship("ListingModel", backref="seller", lazy=True, cascade="all, delete-orphan")
 
@@ -48,8 +56,11 @@ class ListingModel(db.Model):
     seed_image_data = db.Column(db.Text, nullable=False, default="")
     tags_csv = db.Column(db.Text, nullable=False, default="")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    quantity = db.Column(db.Integer, nullable=False, default=1)
+    sku = db.Column(db.String(64), nullable=True, default="")
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
 
-    offers = db.relationship("OfferModel", backref="listing", lazy=True, cascade="all, delete-orphan")
+    offers = db.relationship("Offer", backref="listing", lazy=True, cascade="all, delete-orphan")
 
     @property
     def tags(self) -> tuple[str, ...]:
@@ -82,13 +93,20 @@ class ListingModel(db.Model):
         return len(self.offers)
 
 
-class OfferModel(db.Model):
+class Offer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     listing_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=False, index=True)
-    buyer_name = db.Column(db.String(80), nullable=False)
+    buyer_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
+    status = db.Column(db.String(20), nullable=False, default="pending")
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     message = db.Column(db.Text, nullable=False, default="")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    buyer = db.relationship("User", foreign_keys=[buyer_id], backref="offers_made")
+
+    @property
+    def buyer_display(self) -> str:
+        return self.buyer.username if getattr(self, "buyer", None) else "Unknown buyer"
 
     @property
     def amount_label(self) -> str:
@@ -156,3 +174,181 @@ def deserialize_tags(value: str) -> tuple[str, ...]:
         return ()
     data = json.loads(value)
     return tuple(str(item) for item in data)
+
+
+# Aliases to match UML names
+Item = ListingModel
+
+
+class BankAccount(db.Model):
+    __tablename__ = "bank_account"
+    bankAccountNum = db.Column(db.String(64), primary_key=True)
+    bankName = db.Column(db.String(140), nullable=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+
+    def addBankAccount(self) -> bool:
+        return True
+
+    def updateBankAccount(self) -> bool:
+        return True
+
+    def deleteBankAccount(self) -> bool:
+        return True
+
+
+class Review(db.Model):
+    __tablename__ = "review"
+    reviewID = db.Column(db.String(36), primary_key=True)
+    ratingValue = db.Column(db.Float, nullable=False)
+    comment = db.Column(db.String(500), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+
+    def addReview(self) -> bool:
+        return True
+
+    def editReview(self, new_rating: float, new_comment: str) -> bool:
+        self.ratingValue = new_rating
+        self.comment = new_comment
+        return True
+
+
+class Report(db.Model):
+    __tablename__ = "report"
+    reportID = db.Column(db.String(36), primary_key=True)
+    reason = db.Column(db.String(255), nullable=False)
+    details = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    received_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+
+    def createReport(self) -> bool:
+        return True
+
+
+class Cart(db.Model):
+    __tablename__ = "cart"
+    cartID = db.Column(db.String(36), primary_key=True)
+    owner_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    totalPrice = db.Column(db.Float, nullable=False, default=0.0)
+    itemCount = db.Column(db.Integer, nullable=False, default=0)
+    items_json = db.Column(db.Text, nullable=False, default="[]")
+
+    def addItem(self, item_id: str) -> bool:
+        self.itemCount += 1
+        return True
+
+    def removeItem(self, item_id: str) -> bool:
+        if self.itemCount > 0:
+            self.itemCount -= 1
+        return True
+
+    def checkout(self) -> bool:
+        return True
+
+
+class DealMethod(db.Model):
+    __tablename__ = "deal_method"
+    dealMethodID = db.Column(db.String(36), primary_key=True)
+    methodType = db.Column(db.String(80), nullable=False)
+    carrierName = db.Column(db.String(140), nullable=True)
+    meetupLocation = db.Column(db.String(255), nullable=True)
+    price = db.Column(db.Float, nullable=True, default=0.0)
+    isDefault = db.Column(db.Boolean, nullable=False, default=False)
+    item_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=True)
+
+    def updateDealMethod(self) -> bool:
+        return True
+
+    def setAsDefault(self) -> bool:
+        self.isDefault = True
+        return True
+
+
+class Category(db.Model):
+    __tablename__ = "category"
+    categoryID = db.Column(db.String(36), primary_key=True)
+    name = db.Column(db.String(140), nullable=False)
+
+    def getItemsByCategory(self) -> list[Item]:
+        return []
+
+
+class Subcategory(db.Model):
+    __tablename__ = "subcategory"
+    subcategoryID = db.Column(db.String(36), primary_key=True)
+    name = db.Column(db.String(140), nullable=False)
+    parent_id = db.Column(db.String(36), db.ForeignKey("category.categoryID"), nullable=False)
+
+    def getItemBySubcategory(self) -> list[Item]:
+        return []
+
+
+class ChatSession(db.Model):
+    __tablename__ = "chat_session"
+    chatID = db.Column(db.String(36), primary_key=True)
+    createdAt = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    creator_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    buyer_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
+    seller_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
+    listing_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=True, index=True)
+
+    messages = db.relationship("Message", backref="chat", lazy=True, cascade="all, delete-orphan")
+
+    def createSession(self) -> bool:
+        return True
+
+    def getMessages(self) -> list:
+        return []
+
+    def deleteChatHistory(self) -> bool:
+        return True
+
+
+class Message(db.Model):
+    __tablename__ = "message"
+    messageID = db.Column(db.String(36), primary_key=True)
+    content = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    session_id = db.Column(db.String(36), db.ForeignKey("chat_session.chatID"), nullable=False)
+    creator_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+
+    def sendMessage(self) -> bool:
+        return True
+
+    def deleteMessage(self) -> bool:
+        return True
+
+
+class Payment(db.Model):
+    __tablename__ = "payment"
+    paymentID = db.Column(db.String(36), primary_key=True)
+    paymentType = db.Column(db.String(80), nullable=False)
+    status = db.Column(db.String(80), nullable=False, default="created")
+    transactionDate = db.Column(db.DateTime, nullable=True)
+    buyer_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("order_model.id"), nullable=True, index=True)
+    gateway_reference = db.Column(db.String(64), nullable=True, default="")
+    provider = db.Column(db.String(64), nullable=True, default="")
+
+    def authorizePayment(self) -> bool:
+        self.status = "authorized"
+        self.transactionDate = datetime.utcnow()
+        return True
+
+    def refundPayment(self) -> bool:
+        self.status = "refunded"
+        return True
+
+
+class Shipping(db.Model):
+    __tablename__ = "shipping"
+    shippingID = db.Column(db.String(36), primary_key=True)
+    carrierName = db.Column(db.String(140), nullable=True)
+    trackingNumber = db.Column(db.String(140), nullable=True)
+    estimatedDeliveryDate = db.Column(db.Date, nullable=True)
+
+    def updateTrackingInfo(self, tracking: str) -> bool:
+        self.trackingNumber = tracking
+        return True
+
+    def confirmDelivery(self) -> bool:
+        return True

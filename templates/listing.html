@@ -29,9 +29,13 @@
     {% endif %}
 
     <div class="action-row">
-      <form method="post" action="{{ url_for('add_to_cart', listing_id=listing.id) }}">
-        <button type="submit" class="primary-button">Add to basket</button>
-      </form>
+      {% if current_user.is_authenticated %}
+        <form method="post" action="{{ url_for('add_to_cart', listing_id=listing.id) }}">
+          <button type="submit" class="primary-button">Add to basket</button>
+        </form>
+      {% else %}
+        <a href="{{ url_for('login', next=request.path) }}" class="primary-button">Sign in to add</a>
+      {% endif %}
       <a href="#offer-form" class="secondary-button">Make an offer</a>
       {% if current_user.is_authenticated and current_user.id == listing.seller_id %}
         <a href="{{ url_for('edit_listing', listing_id=listing.id) }}" class="secondary-button">Edit listing</a>
@@ -58,25 +62,23 @@
 <section class="detail-grid secondary-grid">
   <article class="card-surface reveal" data-reveal>
     <div class="section-heading compact">
-      <h2 id="offer-form">Make an offer</h2>
-      <p>Each submission flows through the observer chain so the seller inbox and marketplace feed update together.</p>
+      <h2>Start a chat</h2>
+      <p>Start a private chat with the seller to negotiate and send offers.</p>
     </div>
 
-    <form method="post" action="{{ url_for('submit_offer', listing_id=listing.id) }}" class="stack-form">
-      <label>
-        Your name
-        <input type="text" name="buyer_name" placeholder="Alex" required>
-      </label>
-      <label>
-        Offer amount
-        <input type="number" name="amount" step="0.01" min="0.01" placeholder="120.00" required>
-      </label>
-      <label>
-        Message
-        <textarea name="message" rows="4" placeholder="Can pick up today if that works."></textarea>
-      </label>
-      <button type="submit" class="primary-button">Send offer</button>
-    </form>
+    <div class="stack-form">
+      {% if current_user.is_authenticated %}
+        {% if current_user.id != listing.seller_id %}
+          <form method="post" action="{{ url_for('start_chat', listing_id=listing.id) }}">
+            <button type="submit" class="primary-button">Start a chat</button>
+          </form>
+        {% else %}
+          <p class="info">You cannot start a chat on your own listing.</p>
+        {% endif %}
+      {% else %}
+        <a href="{{ url_for('login', next=request.path) }}" class="primary-button">Sign in to start a chat</a>
+      {% endif %}
+    </div>
   </article>
 
   <article class="card-surface reveal" data-reveal>
@@ -90,7 +92,7 @@
         <article class="feed-item small">
           <span class="feed-dot"></span>
           <div>
-            <strong>{{ offer.buyer_name }} · {{ offer.amount_label }}</strong>
+            <strong>{{ offer.buyer_display }} · {{ offer.amount_label }}</strong>
             <p>{{ offer.message or "No message included." }}</p>
           </div>
         </article>
@@ -120,11 +122,15 @@
           <p class="product-category">{{ item.category }}</p>
           <h3><a href="{{ url_for('listing_detail', listing_id=item.id) }}">{{ item.title }}</a></h3>
           <p class="product-meta">{{ item.condition }} · {{ item.location }} · {{ item.seller_name }}</p>
-          <div class="price-row">
+            <div class="price-row">
             <strong>{{ item.price|money }}</strong>
-            <form method="post" action="{{ url_for('add_to_cart', listing_id=item.id) }}">
-              <button type="submit" class="ghost-button">Add</button>
-            </form>
+            {% if current_user.is_authenticated %}
+              <form method="post" action="{{ url_for('add_to_cart', listing_id=item.id) }}">
+                <button type="submit" class="ghost-button">Add</button>
+              </form>
+            {% else %}
+              <a href="{{ url_for('login', next=url_for('listing_detail', listing_id=item.id)) }}" class="ghost-button">Add</a>
+            {% endif %}
           </div>
         </div>
       </article>
