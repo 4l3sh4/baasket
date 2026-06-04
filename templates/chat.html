@@ -10,44 +10,54 @@
   </div>
 
   <div class="chat-panel card-surface">
-    <div class="messages">
-      {% for m in messages %}
-        <div class="message{% if m.creator_id == current_user.id %} me{% endif %}">
-          <strong>{{ (m.creator.username if m.creator else 'User') }}</strong>
-          <p>{{ m.content }}</p>
-          <time>{{ m.timestamp }}</time>
+    <div class="chat-body">
+      <div class="messages">
+        {% for m in messages %}
+          <div class="message{% if m.creator_id == current_user.id %} me{% endif %}">
+            <div class="meta">
+              <strong>{{ (m.creator.username if m.creator else 'User') }}</strong>
+              <time>{{ m.timestamp.strftime('%b %d %H:%M') if m.timestamp else '' }}</time>
+            </div>
+            <div class="bubble">{{ m.content }}</div>
+          </div>
+        {% else %}
+          <p class="empty-state">No messages yet. Start the conversation.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="chat-controls">
+      <form method="post" action="{{ url_for('post_message', chat_id=chat.chatID) }}" class="stack-form message-form">
+        <label>
+          Message
+          <textarea name="content" rows="3" required></textarea>
+        </label>
+        <div class="form-row">
+          <button type="submit" class="primary-button">Send message</button>
         </div>
-      {% else %}
-        <p class="empty-state">No messages yet. Start the conversation.</p>
-      {% endfor %}
+      </form>
+
+      <div class="section-heading compact">
+        <h3>Send an offer</h3>
+        <p>Offers are sent to the seller as part of the chat.</p>
+      </div>
+
+      <form method="post" action="{{ url_for('chat_offer', chat_id=chat.chatID) }}" class="stack-form offer-form">
+        <div class="two-cols">
+          <label>
+            Amount
+            <input type="number" name="amount" step="0.01" min="0.01" required>
+          </label>
+          <label>
+            Message (optional)
+            <input type="text" name="message" placeholder="Short note (optional)">
+          </label>
+        </div>
+        <div class="form-row">
+          <button type="submit" class="primary-button">Send offer</button>
+        </div>
+      </form>
     </div>
-
-    <form method="post" action="{{ url_for('post_message', chat_id=chat.chatID) }}" class="stack-form">
-      <label>
-        Message
-        <textarea name="content" rows="3" required></textarea>
-      </label>
-      <button type="submit" class="primary-button">Send message</button>
-    </form>
-
-    <hr>
-
-    <div class="section-heading compact">
-      <h3>Send an offer</h3>
-      <p>Offers are sent here to the seller as part of the chat.</p>
-    </div>
-
-    <form method="post" action="{{ url_for('chat_offer', chat_id=chat.chatID) }}" class="stack-form">
-      <label>
-        Amount
-        <input type="number" name="amount" step="0.01" min="0.01" required>
-      </label>
-      <label>
-        Message (optional)
-        <textarea name="message" rows="3"></textarea>
-      </label>
-      <button type="submit" class="primary-button">Send offer</button>
-    </form>
   </div>
 </section>
 {% endblock %}
