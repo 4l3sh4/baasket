@@ -13,7 +13,12 @@ from alembic import context
 config = context.config
 
 # Interpret the config file for Python logging.
-fileConfig(config.config_file_name)
+try:
+    if config.config_file_name and os.path.exists(config.config_file_name):
+        fileConfig(config.config_file_name)
+except Exception:
+    # If logging config is not present in alembic.ini, continue without it
+    pass
 
 # ensure app path is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -22,6 +27,12 @@ from extensions import db
 
 # this is the MetaData object for 'autogenerate' support
 target_metadata = db.metadata
+
+# Ensure a sqlalchemy.url main option exists; fallback to local instance DB
+if not config.get_main_option('sqlalchemy.url'):
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    local_db = os.path.join(project_root, 'instance', 'baasket.db')
+    config.set_main_option('sqlalchemy.url', f"sqlite:///{local_db}")
 
 
 def run_migrations_offline():
@@ -33,8 +44,9 @@ def run_migrations_offline():
 
 
 def run_migrations_online():
+    url = config.get_main_option('sqlalchemy.url')
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section),
+        {'sqlalchemy.url': url},
         prefix='sqlalchemy.',
         poolclass=pool.NullPool,
     )
