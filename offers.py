@@ -53,10 +53,9 @@ class OfferBoard:
         self._activity_feed = ActivityFeedObserver()
         self._observers = observers or [self._seller_inbox, self._activity_feed]
 
-    def submit_offer(self, listing: object, buyer_name: str, amount: Decimal, message: str, buyer_id: int | None = None) -> Offer:
+    def submit_offer(self, listing: object, amount: Decimal, message: str, buyer_id: int | None = None) -> Offer:
         offer = Offer(
             listing_id=int(getattr(listing, "id")),
-            buyer_name=buyer_name,
             buyer_id=buyer_id,
             amount=amount,
             message=message,

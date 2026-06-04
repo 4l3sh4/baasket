@@ -96,7 +96,6 @@ class ListingModel(db.Model):
 class Offer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     listing_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=False, index=True)
-    buyer_name = db.Column(db.String(80), nullable=False)
     buyer_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
     status = db.Column(db.String(20), nullable=False, default="pending")
     amount = db.Column(db.Numeric(10, 2), nullable=False)
@@ -107,7 +106,7 @@ class Offer(db.Model):
 
     @property
     def buyer_display(self) -> str:
-        return self.buyer.username if getattr(self, "buyer", None) else self.buyer_name
+        return self.buyer.username if getattr(self, "buyer", None) else "Unknown buyer"
 
     @property
     def amount_label(self) -> str:
