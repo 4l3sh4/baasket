@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="detail-grid reveal" data-reveal>
+  <article class="card-surface">
+    <div class="section-heading compact">
+      <p class="eyebrow">Sell on Baasket</p>
+      <h1>Create a new listing</h1>
+      <p>Every listing is stored in the database and created through the same factory-inspired flow, keeping item data consistent no matter how it enters the market.</p>
+    </div>
+
+    <form method="post" action="{{ url_for('sell') }}" class="stack-form" enctype="multipart/form-data">
+      <div class="seller-context">
+        <span>Listing as</span>
+        <strong>{{ current_user.username }}</strong>
+      </div>
+      <label>
+        Title
+        <input type="text" name="title" placeholder="Portable projector" required>
+      </label>
+      <label>
+        Category
+        <input list="category-options" type="text" name="category" placeholder="Electronics" required>
+        <datalist id="category-options">
+          {% for option in categories %}
+            <option value="{{ option }}"></option>
+          {% endfor %}
+        </datalist>
+      </label>
+      <label>
+        Asking price
+        <input type="number" name="price" step="0.01" min="0.01" placeholder="150.00" required>
+      </label>
+      <label>
+        Condition
+        <input type="text" name="condition" placeholder="Like new">
+      </label>
+      <label>
+        Location
+        <input type="text" name="location" placeholder="Orchard">
+      </label>
+      <label>
+        Tags
+        <input type="text" name="tags" placeholder="projector, home, entertainment">
+      </label>
+      <label>
+        Listing image
+        <input type="file" name="image" accept="image/*">
+      </label>
+      <label>
+        Listing type
+        <select name="kind">
+          <option value="standard">Standard</option>
+          <option value="fresh">Fresh</option>
+          <option value="featured">Featured</option>
+          <option value="limited">Limited</option>
+        </select>
+      </label>
+      <label>
+        Description
+        <textarea name="description" rows="6" placeholder="Write a clear description for buyers." required></textarea>
+      </label>
+      <button type="submit" class="primary-button">Publish listing</button>
+    </form>
+  </article>
+
+  <aside class="card-surface">
+    <div class="section-heading compact">
+      <h2>Marketplace rules</h2>
+      <p>These defaults keep the experience clean and predictable.</p>
+    </div>
+
+    <div class="feed-list">
+      <article class="feed-item">
+        <span class="feed-dot"></span>
+        <div>
+          <strong>Factory pattern</strong>
+          <p>Listings are built from a single creation path, so item types stay consistent.</p>
+        </div>
+      </article>
+      <article class="feed-item">
+        <span class="feed-dot"></span>
+        <div>
+          <strong>Strategy pattern</strong>
+          <p>Checkout can switch between payment methods without changing the route logic.</p>
+        </div>
+      </article>
+      <article class="feed-item">
+        <span class="feed-dot"></span>
+        <div>
+          <strong>Observer pattern</strong>
+          <p>Offers notify the seller inbox and the activity feed at the same time.</p>
+        </div>
+      </article>
+    </div>
+  </aside>
+</section>
+{% endblock %}

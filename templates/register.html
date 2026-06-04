@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="auth-grid reveal" data-reveal>
+  <article class="card-surface auth-panel">
+    <div class="section-heading compact">
+      <p class="eyebrow">Create account</p>
+      <h1>Start selling on Baasket</h1>
+      <p>Create your storefront, upload a profile image, and list items from the dashboard.</p>
+    </div>
+
+    <form method="post" class="stack-form" enctype="multipart/form-data">
+      <label>
+        Username
+        <input type="text" name="username" placeholder="baasket_seller" required>
+      </label>
+      <label>
+        Email
+        <input type="email" name="email" placeholder="you@example.com" required>
+      </label>
+      <label>
+        Password
+        <input type="password" name="password" placeholder="Choose a secure password" required>
+      </label>
+      <label>
+        Bio
+        <textarea name="bio" rows="4" placeholder="Tell buyers what you sell."></textarea>
+      </label>
+      <label>
+        Profile image
+        <input type="file" name="profile_image" accept="image/*">
+      </label>
+      <button type="submit" class="primary-button">Create account</button>
+    </form>
+  </article>
+
+  <aside class="card-surface auth-panel">
+    <div class="section-heading compact">
+      <h2>Why a real account matters</h2>
+      <p>It gives each seller their own listings, image uploads, and dashboard state.</p>
+    </div>
+    <div class="feed-list">
+      <article class="feed-item"><span class="feed-dot"></span><div><strong>Own your inventory</strong><p>Listings are tied to your user record.</p></div></article>
+      <article class="feed-item"><span class="feed-dot"></span><div><strong>Track offers</strong><p>See buyer interest grouped by listing.</p></div></article>
+      <article class="feed-item"><span class="feed-dot"></span><div><strong>Update storefront</strong><p>Edit your bio and profile picture from the dashboard.</p></div></article>
+    </div>
+  </aside>
+</section>
+{% endblock %}

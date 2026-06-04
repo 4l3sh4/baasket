@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card-surface reveal" data-reveal>
+  <div class="section-heading compact">
+    <p class="eyebrow">Your basket</p>
+    <h1>Ready to check out?</h1>
+    <p>Choose a payment strategy below. The checkout flow is intentionally lightweight and easy to swap.</p>
+  </div>
+
+  {% if lines %}
+    <div class="cart-layout">
+      <div class="cart-lines">
+        {% for line in lines %}
+          <article class="cart-line">
+            <img src="{{ line.listing.image_data }}" alt="{{ line.listing.title }}">
+            <div>
+              <h3>{{ line.listing.title }}</h3>
+              <p>{{ line.listing.condition }} · {{ line.listing.location }} · {{ line.listing.seller_name }}</p>
+              <strong>{{ line.listing.price|money }}</strong>
+            </div>
+            <div class="cart-controls">
+              <span>Qty {{ line.quantity }}</span>
+              <form method="post" action="{{ url_for('remove_from_cart', listing_id=line.listing.id) }}">
+                <button type="submit" class="ghost-button">Remove</button>
+              </form>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+
+      <aside class="checkout-panel">
+        <h2>Checkout</h2>
+        <p class="subtotal-row">Subtotal <strong>{{ subtotal|money }}</strong></p>
+
+        <form method="post" action="{{ url_for('checkout') }}" class="stack-form">
+          <label>
+            Name
+            <input type="text" name="buyer_name" placeholder="Your name" required>
+          </label>
+          <label>
+            Email
+            <input type="email" name="buyer_email" placeholder="you@example.com">
+          </label>
+          <label>
+            Payment method
+            <select name="payment_method" required>
+              {% for method in payment_methods %}
+                <option value="{{ method.code }}">{{ method.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            Order note
+            <textarea name="note" rows="3" placeholder="Delivery instructions or pickup notes."></textarea>
+          </label>
+          <button type="submit" class="primary-button">Pay now</button>
+        </form>
+      </aside>
+    </div>
+  {% else %}
+    <div class="empty-state wide">
+      Your basket is empty. Browse the marketplace and add something you like.
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

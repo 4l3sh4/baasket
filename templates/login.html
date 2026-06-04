@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="auth-grid reveal" data-reveal>
+  <article class="card-surface auth-panel">
+    <div class="section-heading compact">
+      <p class="eyebrow">Welcome back</p>
+      <h1>Sign in to your Baasket account</h1>
+      <p>Use your username or email to access your seller dashboard and listings.</p>
+    </div>
+
+    <form method="post" class="stack-form">
+      <label>
+        Username or email
+        <input type="text" name="identifier" placeholder="alex or alex@example.com" required>
+      </label>
+      <label>
+        Password
+        <input type="password" name="password" placeholder="Your password" required>
+      </label>
+      <button type="submit" class="primary-button">Sign in</button>
+    </form>
+  </article>
+
+  <aside class="card-surface auth-panel">
+    <div class="section-heading compact">
+      <h2>What you get</h2>
+      <p>Persistent accounts, seller tools, and uploaded storefront images.</p>
+    </div>
+    <div class="feed-list">
+      <article class="feed-item"><span class="feed-dot"></span><div><strong>Saved listings</strong><p>Your inventory stays in SQLite.</p></div></article>
+      <article class="feed-item"><span class="feed-dot"></span><div><strong>Offer history</strong><p>Offers are stored and visible after refresh.</p></div></article>
+      <article class="feed-item"><span class="feed-dot"></span><div><strong>Image uploads</strong><p>Add product and profile images directly from the browser.</p></div></article>
+    </div>
+  </aside>
+</section>
+{% endblock %}

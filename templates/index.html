@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero reveal" data-reveal>
+  <div class="hero-copy">
+    <p class="eyebrow">Curated marketplace, built for quick moves</p>
+    <h1>Buy, sell, and make offers with less friction.</h1>
+    <p class="hero-text">
+      Baasket blends the feel of a fast local marketplace with a clean shopping flow so buyers can browse, negotiate,
+      and check out in one place.
+    </p>
+
+    <form class="search-bar" method="get" action="{{ url_for('index') }}">
+      <input type="search" name="q" value="{{ search }}" placeholder="Search cameras, shoes, scooters...">
+      <select name="category">
+        <option value="">All categories</option>
+        {% for option in categories %}
+          <option value="{{ option }}" {% if option == category %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Search</button>
+    </form>
+
+    <div class="hero-stats">
+      <article>
+        <strong>{{ listing_count }}</strong>
+        <span>live listings</span>
+      </article>
+      <article>
+        <strong>{{ payment_methods|length }}</strong>
+        <span>payment strategies</span>
+      </article>
+      <article>
+        <strong>1</strong>
+        <span>offer engine</span>
+      </article>
+    </div>
+  </div>
+
+  <div class="hero-card reveal" data-reveal>
+    <div class="hero-card-top">
+      <span class="badge">Featured now</span>
+      <span class="subtle">Carousell-style discovery</span>
+    </div>
+    {% if featured %}
+      <img src="{{ featured[0].image_data }}" alt="{{ featured[0].title }}" class="hero-preview">
+      <h2>{{ featured[0].title }}</h2>
+      <p>{{ featured[0].description }}</p>
+      <div class="price-row">
+        <strong>{{ featured[0].price|money }}</strong>
+        <span>{{ featured[0].badge }}</span>
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="grid-layout">
+  <div class="section-block">
+    <div class="section-heading">
+      <div>
+        <h2>Featured picks</h2>
+        <p>Hand-picked inventory that looks and feels like a modern marketplace feed.</p>
+      </div>
+    </div>
+
+    <div class="listing-grid">
+      {% for listing in featured %}
+        <article class="product-card reveal" data-reveal>
+          <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="product-image-wrap">
+            <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
+            <span class="badge">{{ listing.badge }}</span>
+          </a>
+          <div class="product-copy">
+            <p class="product-category">{{ listing.category }}</p>
+            <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
+            <p class="product-meta">{{ listing.condition }} · {{ listing.location }} · {{ listing.seller_name }}</p>
+            <div class="price-row">
+              <strong>{{ listing.price|money }}</strong>
+              <form method="post" action="{{ url_for('add_to_cart', listing_id=listing.id) }}">
+                <button type="submit" class="ghost-button">Add</button>
+              </form>
+            </div>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  </div>
+
+  <aside class="side-panel reveal" data-reveal>
+    <div class="section-heading compact">
+      <h2>Recent offers</h2>
+      <p>Observer-driven updates from the offer board.</p>
+    </div>
+
+    <div class="feed-list">
+      {% for entry in activity_feed %}
+        <article class="feed-item">
+          <span class="feed-dot"></span>
+          <div>
+            <strong>{{ entry.headline }}</strong>
+            <p>{{ entry.detail }}</p>
+          </div>
+        </article>
+      {% else %}
+        <p class="empty-state">Offers will appear here once buyers start negotiating.</p>
+      {% endfor %}
+    </div>
+
+    <div class="panel-note">
+      <h3>Why this structure works</h3>
+      <p>The listing factory owns item creation, payment choices stay interchangeable, and offer updates are broadcast
+      through observers instead of hard-coded callbacks.</p>
+    </div>
+  </aside>
+</section>
+
+<section class="section-block">
+  <div class="section-heading">
+    <div>
+      <h2>Browse the full market</h2>
+      <p>Filter by category or search for something specific.</p>
+    </div>
+  </div>
+
+  <div class="listing-grid compact-grid">
+    {% for listing in listings %}
+      <article class="product-card reveal" data-reveal>
+        <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="product-image-wrap">
+          <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
+          <span class="badge">{{ listing.badge }}</span>
+        </a>
+        <div class="product-copy">
+          <p class="product-category">{{ listing.category }}</p>
+          <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
+          <p class="product-meta">{{ listing.condition }} · {{ listing.location }} · {{ listing.seller_name }}</p>
+          <div class="price-row">
+            <strong>{{ listing.price|money }}</strong>
+            <form method="post" action="{{ url_for('add_to_cart', listing_id=listing.id) }}">
+              <button type="submit" class="ghost-button">Add</button>
+            </form>
+          </div>
+        </div>
+      </article>
+    {% else %}
+      <div class="empty-state wide">
+        No listings matched that search.
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

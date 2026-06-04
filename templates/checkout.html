@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card-surface reveal checkout-summary" data-reveal>
+  <div class="section-heading compact">
+    <p class="eyebrow">Checkout complete</p>
+    <h1>Payment received</h1>
+    <p>{{ receipt.message }}</p>
+  </div>
+
+  <div class="receipt-grid">
+    <article>
+      <span>Reference</span>
+      <strong>{{ receipt.reference }}</strong>
+    </article>
+    <article>
+      <span>Method</span>
+      <strong>{{ receipt.strategy_label }}</strong>
+    </article>
+    <article>
+      <span>Subtotal</span>
+      <strong>{{ receipt.subtotal|money }}</strong>
+    </article>
+    <article>
+      <span>Fee</span>
+      <strong>{{ receipt.fee|money }}</strong>
+    </article>
+    <article>
+      <span>Total</span>
+      <strong>{{ receipt.total|money }}</strong>
+    </article>
+  </div>
+
+  <div class="panel-note receipt-note">
+    <h2>What was processed</h2>
+    <p>{{ lines|length }} item(s) for {{ buyer_name }}{% if buyer_email %} · {{ buyer_email }}{% endif %}.</p>
+  </div>
+
+  <a href="{{ url_for('index') }}" class="primary-button inline-button">Back to marketplace</a>
+</section>
+{% endblock %}

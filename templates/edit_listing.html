@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="detail-grid reveal" data-reveal>
+  <article class="card-surface">
+    <div class="section-heading compact">
+      <p class="eyebrow">Edit listing</p>
+      <h1>{{ listing.title }}</h1>
+      <p>Update the details, refresh the photo, or change the listing type without recreating the item.</p>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="stack-form">
+      <label>
+        Title
+        <input type="text" name="title" value="{{ listing.title }}" required>
+      </label>
+      <label>
+        Category
+        <input list="category-options" type="text" name="category" value="{{ listing.category }}" required>
+        <datalist id="category-options">
+          {% for option in categories %}
+            <option value="{{ option }}"></option>
+          {% endfor %}
+        </datalist>
+      </label>
+      <label>
+        Price
+        <input type="number" name="price" step="0.01" min="0.01" value="{{ listing.price }}" required>
+      </label>
+      <label>
+        Condition
+        <input type="text" name="condition" value="{{ listing.condition }}">
+      </label>
+      <label>
+        Location
+        <input type="text" name="location" value="{{ listing.location }}">
+      </label>
+      <label>
+        Tags
+        <input type="text" name="tags" value="{{ listing.tags|join(', ') }}">
+      </label>
+      <label>
+        New listing image
+        <input type="file" name="image" accept="image/*">
+      </label>
+      <label>
+        Listing type
+        <select name="kind">
+          <option value="standard" {% if listing.kind == 'standard' %}selected{% endif %}>Standard</option>
+          <option value="fresh" {% if listing.kind == 'fresh' %}selected{% endif %}>Fresh</option>
+          <option value="featured" {% if listing.kind == 'featured' %}selected{% endif %}>Featured</option>
+          <option value="limited" {% if listing.kind == 'limited' %}selected{% endif %}>Limited</option>
+        </select>
+      </label>
+      <label>
+        Description
+        <textarea name="description" rows="7" required>{{ listing.description }}</textarea>
+      </label>
+      <div class="action-row">
+        <button type="submit" class="primary-button">Save changes</button>
+        <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="secondary-button">Cancel</a>
+      </div>
+    </form>
+  </article>
+
+  <aside class="card-surface">
+    <div class="section-heading compact">
+      <h2>Current preview</h2>
+      <p>What buyers see before your update.</p>
+    </div>
+    <img src="{{ listing.image_data }}" alt="{{ listing.title }}" class="detail-image">
+  </aside>
+</section>
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="detail-grid reveal" data-reveal>
+  <article class="detail-media card-surface">
+    <img src="{{ listing.image_data }}" alt="{{ listing.title }}" class="detail-image">
+  </article>
+
+  <article class="detail-copy card-surface">
+    <div class="section-heading compact">
+      <p class="eyebrow">{{ listing.category }}</p>
+      <h1>{{ listing.title }}</h1>
+      <p class="product-meta">{{ listing.condition }} · {{ listing.location }} · Sold by {{ listing.seller_name }}</p>
+    </div>
+
+    <div class="price-row">
+      <strong class="detail-price">{{ listing.price|money }}</strong>
+      <span class="badge">{{ listing.badge }}</span>
+    </div>
+
+    <p class="detail-description">{{ listing.description }}</p>
+
+    {% if listing.tags %}
+      <div class="tag-row">
+        {% for tag in listing.tags %}
+          <span class="tag">#{{ tag }}</span>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="action-row">
+      <form method="post" action="{{ url_for('add_to_cart', listing_id=listing.id) }}">
+        <button type="submit" class="primary-button">Add to basket</button>
+      </form>
+      <a href="#offer-form" class="secondary-button">Make an offer</a>
+      {% if current_user.is_authenticated and current_user.id == listing.seller_id %}
+        <a href="{{ url_for('edit_listing', listing_id=listing.id) }}" class="secondary-button">Edit listing</a>
+      {% endif %}
+    </div>
+
+    <div class="mini-grid">
+      <article>
+        <span>Condition</span>
+        <strong>{{ listing.condition }}</strong>
+      </article>
+      <article>
+        <span>Location</span>
+        <strong>{{ listing.location }}</strong>
+      </article>
+      <article>
+        <span>Seller</span>
+        <strong>{{ listing.seller_name }}</strong>
+      </article>
+    </div>
+  </article>
+</section>
+
+<section class="detail-grid secondary-grid">
+  <article class="card-surface reveal" data-reveal>
+    <div class="section-heading compact">
+      <h2 id="offer-form">Make an offer</h2>
+      <p>Each submission flows through the observer chain so the seller inbox and marketplace feed update together.</p>
+    </div>
+
+    <form method="post" action="{{ url_for('submit_offer', listing_id=listing.id) }}" class="stack-form">
+      <label>
+        Your name
+        <input type="text" name="buyer_name" placeholder="Alex" required>
+      </label>
+      <label>
+        Offer amount
+        <input type="number" name="amount" step="0.01" min="0.01" placeholder="120.00" required>
+      </label>
+      <label>
+        Message
+        <textarea name="message" rows="4" placeholder="Can pick up today if that works."></textarea>
+      </label>
+      <button type="submit" class="primary-button">Send offer</button>
+    </form>
+  </article>
+
+  <article class="card-surface reveal" data-reveal>
+    <div class="section-heading compact">
+      <h2>Offer history</h2>
+      <p>Recent negotiations for this listing.</p>
+    </div>
+
+    <div class="feed-list compact-feed">
+      {% for offer in offers %}
+        <article class="feed-item small">
+          <span class="feed-dot"></span>
+          <div>
+            <strong>{{ offer.buyer_name }} · {{ offer.amount_label }}</strong>
+            <p>{{ offer.message or "No message included." }}</p>
+          </div>
+        </article>
+      {% else %}
+        <p class="empty-state">No offers yet. Be the first to negotiate.</p>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+
+<section class="section-block">
+  <div class="section-heading">
+    <div>
+      <h2>Related picks</h2>
+      <p>More items from the same marketplace neighborhood.</p>
+    </div>
+  </div>
+
+  <div class="listing-grid compact-grid">
+    {% for item in related %}
+      <article class="product-card reveal" data-reveal>
+        <a href="{{ url_for('listing_detail', listing_id=item.id) }}" class="product-image-wrap">
+          <img src="{{ item.image_data }}" alt="{{ item.title }}">
+          <span class="badge">{{ item.badge }}</span>
+        </a>
+        <div class="product-copy">
+          <p class="product-category">{{ item.category }}</p>
+          <h3><a href="{{ url_for('listing_detail', listing_id=item.id) }}">{{ item.title }}</a></h3>
+          <p class="product-meta">{{ item.condition }} · {{ item.location }} · {{ item.seller_name }}</p>
+          <div class="price-row">
+            <strong>{{ item.price|money }}</strong>
+            <form method="post" action="{{ url_for('add_to_cart', listing_id=item.id) }}">
+              <button type="submit" class="ghost-button">Add</button>
+            </form>
+          </div>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

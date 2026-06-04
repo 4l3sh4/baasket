@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="dashboard-hero card-surface reveal" data-reveal>
+  <div class="dashboard-profile">
+    <img src="{{ current_user.profile_image_url }}" alt="{{ current_user.username }} profile image" class="dashboard-avatar">
+    <div>
+      <p class="eyebrow">Seller dashboard</p>
+      <h1>{{ current_user.username }}</h1>
+      <p>{{ current_user.bio or "No bio yet. Tell buyers what you specialize in." }}</p>
+      <p class="muted-text">{{ current_user.email }}</p>
+    </div>
+  </div>
+
+  <div class="hero-stats dashboard-stats">
+    <article>
+      <strong>{{ stats.listings }}</strong>
+      <span>active listings</span>
+    </article>
+    <article>
+      <strong>{{ stats.offers }}</strong>
+      <span>offers received</span>
+    </article>
+    <article>
+      <strong>{{ current_user.created_at.strftime('%b %Y') }}</strong>
+      <span>member since</span>
+    </article>
+  </div>
+</section>
+
+<section class="detail-grid secondary-grid">
+  <article class="card-surface reveal" data-reveal>
+    <div class="section-heading compact">
+      <h2>Update profile</h2>
+      <p>Keep your seller page fresh without leaving the dashboard.</p>
+    </div>
+
+    <form method="post" class="stack-form" enctype="multipart/form-data">
+      <label>
+        Bio
+        <textarea name="bio" rows="4">{{ current_user.bio }}</textarea>
+      </label>
+      <label>
+        New profile image
+        <input type="file" name="profile_image" accept="image/*">
+      </label>
+      <button type="submit" class="primary-button">Save profile</button>
+    </form>
+  </article>
+
+  <article class="card-surface reveal" data-reveal>
+    <div class="section-heading compact">
+      <h2>Recent offers</h2>
+      <p>New buyer messages sorted by newest first.</p>
+    </div>
+
+    <div class="feed-list compact-feed">
+      {% for offer in recent_offers %}
+        <article class="feed-item small">
+          <span class="feed-dot"></span>
+          <div>
+            <strong>{{ offer.buyer_name }} · {{ offer.amount_label }}</strong>
+            <p>{{ offer.listing.title }}</p>
+          </div>
+        </article>
+      {% else %}
+        <p class="empty-state">No offers yet. Buyers will appear here once they start negotiating.</p>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+
+<section class="section-block">
+  <div class="section-heading">
+    <div>
+      <h2>Your listings</h2>
+      <p>All items linked to your account, including uploaded images.</p>
+    </div>
+  </div>
+
+  <div class="listing-grid compact-grid">
+    {% for listing in listings %}
+      <article class="product-card reveal" data-reveal>
+        <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="product-image-wrap">
+          <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
+          <span class="badge">{{ listing.badge }}</span>
+        </a>
+        <div class="product-copy">
+          <p class="product-category">{{ listing.category }}</p>
+          <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
+          <p class="product-meta">{{ listing.condition }} · {{ listing.location }}</p>
+          <div class="price-row">
+            <strong>{{ listing.price|money }}</strong>
+            <div class="dashboard-actions">
+              <span class="dashboard-count">{{ listing.offer_count }} offers</span>
+              <form method="post" action="{{ url_for('delete_listing', listing_id=listing.id) }}">
+                <button type="submit" class="ghost-button">Delete</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </article>
+    {% else %}
+      <div class="empty-state wide">You have not posted any items yet.</div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="section-block">
+  <div class="section-heading">
+    <div>
+      <h2>Sales history</h2>
+      <p>Completed orders that include your listings.</p>
+    </div>
+  </div>
+
+  <div class="feed-list">
+    {% for entry in sales_history %}
+      <article class="feed-item">
+        <span class="feed-dot"></span>
+        <div>
+          <strong>{{ entry.item.title }} · {{ entry.item.line_total_label }}</strong>
+          <p>Order {{ entry.order.reference }} for {{ entry.order.buyer_name }} on {{ entry.order.created_at.strftime('%d %b %Y') }}</p>
+        </div>
+        <div class="dashboard-actions">
+          <span class="dashboard-count">Qty {{ entry.item.quantity }}</span>
+          <span class="dashboard-count">{{ entry.order.payment_method }}</span>
+        </div>
+      </article>
+    {% else %}
+      <div class="empty-state wide">No completed sales yet. Paid orders will appear here automatically.</div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
