@@ -550,7 +550,7 @@ def create_app() -> Flask:
 		if amount <= 0:
 			flash("Offer amounts must be greater than zero.", "warning")
 			return redirect(url_for("chat_view", chat_id=chat_id))
-		offer = Offer(listing_id=listing.id, buyer_name=current_user.username, buyer_id=current_user.id, amount=amount, message=message)
+		offer = Offer(listing_id=listing.id, buyer_id=current_user.id, amount=amount, message=message)
 		db.session.add(offer)
 		db.session.commit()
 		flash("Your offer was sent in chat.", "success")
