@@ -1376,3 +1376,198 @@ h3 {
     max-width: 90%;
   }
 }
+/* ============================================================
+   MESSAGES INBOX
+   ============================================================ */
+
+.inbox-list {
+  display: grid;
+  gap: 12px;
+}
+
+.inbox-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: var(--radius-xl);
+  text-decoration: none;
+  color: var(--ink);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  cursor: pointer;
+}
+
+.inbox-row:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 44px rgba(21, 32, 43, 0.12);
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.inbox-thumb-wrap {
+  flex: none;
+}
+
+.inbox-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  display: block;
+}
+
+.inbox-thumb--placeholder {
+  background: rgba(31, 111, 120, 0.08);
+  border: 1px solid rgba(31, 111, 120, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+}
+
+.inbox-body {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.inbox-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inbox-title-group {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inbox-other {
+  font-weight: 800;
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+.inbox-listing-name {
+  color: var(--muted);
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-time {
+  color: var(--muted);
+  font-size: 0.8rem;
+  flex: none;
+}
+
+.inbox-preview {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-offer-badge {
+  font-weight: 700;
+  color: #1f6f78;
+}
+
+.inbox-price-tag {
+  display: inline-flex;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(226, 109, 92, 0.1);
+  color: var(--accent-deep);
+  font-size: 0.78rem;
+  font-weight: 800;
+  width: fit-content;
+}
+
+.inbox-role {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex: none;
+}
+
+.role-chip {
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.role-chip--buyer {
+  background: rgba(226, 109, 92, 0.1);
+  color: var(--accent-deep);
+}
+
+.role-chip--seller {
+  background: rgba(31, 111, 120, 0.1);
+  color: #1f6f78;
+}
+
+.inbox-arrow {
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+/* Empty state */
+.inbox-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 56px 32px;
+  border-radius: var(--radius-xl);
+}
+
+.inbox-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 4px;
+}
+
+.inbox-empty h3 {
+  font-size: 1.4rem;
+  margin: 0;
+}
+
+.inbox-empty p {
+  color: var(--muted);
+  max-width: 40ch;
+  margin: 0;
+}
+
+/* Teal pill variant for messages count */
+.pill--teal {
+  background: rgba(31, 111, 120, 0.14);
+  color: #1f6f78;
+}
+
+@media (max-width: 600px) {
+  .inbox-row {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+
+  .inbox-thumb {
+    width: 52px;
+    height: 52px;
+  }
+
+  .inbox-role {
+    display: none;
+  }
+}

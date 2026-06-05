@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="section-block">
+
+  <div class="section-heading">
+    <div>
+      <h2>Messages</h2>
+      <p>Your active conversations with buyers and sellers.</p>
+    </div>
+  </div>
+
+  {% if chats %}
+    <div class="inbox-list">
+      {% for entry in chats %}
+        {% set chat = entry.chat %}
+        {% set listing = entry.listing %}
+        {% set last_msg = entry.last_message %}
+        {% set other = entry.other_party %}
+
+        <a href="{{ url_for('chat_view', chat_id=chat.chatID) }}" class="inbox-row card-surface">
+
+          {# Listing thumbnail #}
+          <div class="inbox-thumb-wrap">
+            {% if listing and listing.image_data %}
+              <img class="inbox-thumb" src="{{ listing.image_data }}" alt="{{ listing.title }}">
+            {% else %}
+              <div class="inbox-thumb inbox-thumb--placeholder">💬</div>
+            {% endif %}
+          </div>
+
+          {# Main content #}
+          <div class="inbox-body">
+            <div class="inbox-top">
+              <div class="inbox-title-group">
+                <span class="inbox-other">
+                  {{ other.username if other else 'Unknown user' }}
+                </span>
+                {% if listing %}
+                  <span class="inbox-listing-name">re: {{ listing.title }}</span>
+                {% endif %}
+              </div>
+              <time class="inbox-time">
+                {% if last_msg and last_msg.timestamp %}
+                  {{ last_msg.timestamp.strftime('%b %d') }}
+                {% else %}
+                  {{ chat.createdAt.strftime('%b %d') if chat.createdAt else '' }}
+                {% endif %}
+              </time>
+            </div>
+
+            <p class="inbox-preview">
+              {% if last_msg %}
+                {% if last_msg.content.startswith('OFFER:') %}
+                  <span class="inbox-offer-badge">🏷️ Price offer sent</span>
+                {% else %}
+                  {{ last_msg.content | truncate(80) }}
+                {% endif %}
+              {% else %}
+                <em>No messages yet — say hello!</em>
+              {% endif %}
+            </p>
+
+            {% if listing %}
+              <span class="inbox-price-tag">{{ listing.price_label }}</span>
+            {% endif %}
+          </div>
+
+          {# Role chip #}
+          <div class="inbox-role">
+            {% if current_user.id == chat.buyer_id %}
+              <span class="role-chip role-chip--buyer">Buyer</span>
+            {% else %}
+              <span class="role-chip role-chip--seller">Seller</span>
+            {% endif %}
+            <span class="inbox-arrow">→</span>
+          </div>
+
+        </a>
+      {% endfor %}
+    </div>
+
+  {% else %}
+    <div class="inbox-empty card-surface">
+      <div class="inbox-empty-icon">💬</div>
+      <h3>No conversations yet</h3>
+      <p>When you message a seller or a buyer contacts you, conversations will appear here.</p>
+      <a href="{{ url_for('index') }}" class="primary-button" style="display:inline-flex; margin-top:12px;">Browse listings</a>
+    </div>
+  {% endif %}
+
+</section>
+{% endblock %}

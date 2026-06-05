@@ -157,6 +157,16 @@ def _seed_database() -> None:
 	else:
 		demo_user = User.query.filter_by(username="baasket").first() or User.query.first()
 
+	# Remove all listings owned by the demo/seed account so only real users' items remain
+	if demo_user is not None:
+		seed_listings = Item.query.filter_by(seller_id=demo_user.id).all()
+		for listing in seed_listings:
+			db.session.delete(listing)
+		if seed_listings:
+			db.session.commit()
+
+	# Only seed if there are still no listings (i.e. no real users have posted yet).
+	# Once a real user creates a listing this block never runs again.
 	if Item.query.count() == 0 and demo_user is not None:
 		seed_repository = build_seeded_catalog(ListingFactory())
 		for seed_listing in seed_repository.all():
@@ -198,8 +208,17 @@ def create_app() -> Flask:
 
 	@app.context_processor
 	def inject_globals() -> dict[str, object]:
+		chat_count = 0
+		if current_user.is_authenticated:
+			chat_count = ChatSession.query.filter(
+				or_(
+					ChatSession.buyer_id == current_user.id,
+					ChatSession.seller_id == current_user.id,
+				)
+			).count()
 		return {
 			"cart_count": len(session.get("cart", [])),
+			"chat_count": chat_count,
 			"payment_methods": payment_gateway.options(),
 			"brand_logo": url_for("static", filename="assets/logo/baasket_logo.png"),
 		}
@@ -506,6 +525,43 @@ def create_app() -> Flask:
 			chat=chat,
 			messages=messages,
 			listing=listing,
+		)
+
+	@app.get("/messages")
+	@login_required
+	def messages_inbox() -> str:
+		chats = (
+			ChatSession.query.filter(
+				or_(
+					ChatSession.buyer_id == current_user.id,
+					ChatSession.seller_id == current_user.id,
+				)
+			)
+			.order_by(ChatSession.createdAt.desc())
+			.all()
+		)
+
+		inbox = []
+		for chat in chats:
+			listing = db.session.get(Item, chat.listing_id) if chat.listing_id else None
+			last_msg = (
+				Message.query.filter_by(session_id=chat.chatID)
+				.order_by(Message.timestamp.desc())
+				.first()
+			)
+			other_id = chat.seller_id if current_user.id == chat.buyer_id else chat.buyer_id
+			other = db.session.get(User, other_id) if other_id else None
+			inbox.append({
+				"chat": chat,
+				"listing": listing,
+				"last_message": last_msg,
+				"other_party": other,
+			})
+
+		return render_template(
+			"messages.html",
+			title="Messages | Baasket",
+			chats=inbox,
 		)
 
 	@app.post("/chat/<string:chat_id>/message")

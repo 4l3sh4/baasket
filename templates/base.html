@@ -21,6 +21,12 @@
       {% if current_user.is_authenticated %}
         <a href="{{ url_for('dashboard') }}">Dashboard</a>
         <a href="{{ url_for('sell') }}">Sell</a>
+        <a href="{{ url_for('messages_inbox') }}">
+          Messages
+          {% if chat_count and chat_count > 0 %}
+            <span class="pill pill--teal">{{ chat_count }}</span>
+          {% endif %}
+        </a>
         <a href="{{ url_for('logout') }}">Logout</a>
       {% else %}
         <a href="{{ url_for('login') }}">Login</a>
