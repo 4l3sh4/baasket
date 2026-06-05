@@ -552,8 +552,63 @@ def create_app() -> Flask:
 			return redirect(url_for("chat_view", chat_id=chat_id))
 		offer = Offer(listing_id=listing.id, buyer_id=current_user.id, amount=amount, message=message)
 		db.session.add(offer)
+		db.session.flush()  # populate offer.id before commit
+		# Post a message into the chat thread so the offer appears inline
+		offer_msg = Message(
+			messageID=uuid4().hex,
+			content=f"OFFER:{offer.id}",
+			session_id=chat.chatID,
+			creator_id=current_user.id,
+		)
+		db.session.add(offer_msg)
 		db.session.commit()
 		flash("Your offer was sent in chat.", "success")
+		return redirect(url_for("chat_view", chat_id=chat_id))
+
+	@app.post("/chat/<string:chat_id>/offer/<int:offer_id>/accept")
+	@login_required
+	def accept_offer(chat_id: str, offer_id: int):
+		chat = ChatSession.query.filter_by(chatID=chat_id).first()
+		if chat is None or current_user.id != chat.seller_id:
+			flash("Not authorised.", "warning")
+			return redirect(url_for("index"))
+		offer = db.session.get(Offer, offer_id)
+		if offer is None or offer.status != "pending":
+			flash("Offer not found or already resolved.", "warning")
+			return redirect(url_for("chat_view", chat_id=chat_id))
+		offer.status = "accepted"
+		notify = Message(
+			messageID=uuid4().hex,
+			content=f"✓ Offer of {offer.amount_label} accepted! Please proceed with payment.",
+			session_id=chat.chatID,
+			creator_id=current_user.id,
+		)
+		db.session.add(notify)
+		db.session.commit()
+		flash("Offer accepted.", "success")
+		return redirect(url_for("chat_view", chat_id=chat_id))
+
+	@app.post("/chat/<string:chat_id>/offer/<int:offer_id>/decline")
+	@login_required
+	def decline_offer(chat_id: str, offer_id: int):
+		chat = ChatSession.query.filter_by(chatID=chat_id).first()
+		if chat is None or current_user.id != chat.seller_id:
+			flash("Not authorised.", "warning")
+			return redirect(url_for("index"))
+		offer = db.session.get(Offer, offer_id)
+		if offer is None or offer.status != "pending":
+			flash("Offer not found or already resolved.", "warning")
+			return redirect(url_for("chat_view", chat_id=chat_id))
+		offer.status = "declined"
+		notify = Message(
+			messageID=uuid4().hex,
+			content=f"✕ The offer of {offer.amount_label} was declined.",
+			session_id=chat.chatID,
+			creator_id=current_user.id,
+		)
+		db.session.add(notify)
+		db.session.commit()
+		flash("Offer declined.", "info")
 		return redirect(url_for("chat_view", chat_id=chat_id))
 
 	@app.route("/register", methods=["GET", "POST"])
