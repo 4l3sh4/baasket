@@ -23,6 +23,165 @@ INSTANCE_DIR = BASE_DIR / "instance"
 LISTING_UPLOAD_DIR = BASE_DIR / "static" / "uploads" / "listings"
 PROFILE_UPLOAD_DIR = BASE_DIR / "static" / "uploads" / "pfp"
 
+# ── Category / subcategory taxonomy ──────────────────────────────────────────
+CATEGORIES_MAP: dict[str, list[str]] = {
+	"Computers & Tech": [
+		"Desktops",
+		"Laptops & Notebooks",
+		"Parts & Accessories",
+		"Printers, Scanners & Copiers",
+		"Business & Business Technology",
+	],
+	"Mobile Phones & Gadgets": [
+		"Mobile Phones",
+		"Tablets",
+		"E-Readers",
+		"Wearables & Smart Watches",
+		"Mobile & Gadget Accessories",
+		"Walkie-Talkie",
+		"Other Gadgets",
+	],
+	"Women's Fashion": [
+		"Activewear",
+		"Maternity Wear",
+		"Tops",
+		"Bottoms",
+		"Dresses & Sets",
+		"Footwear",
+		"Swimwear",
+		"Muslimah Fashion",
+		"Coats, Jackets and Outerwear",
+		"Bags & Wallets",
+		"Jewelry & Organisers",
+		"Watches & Accessories",
+		"New Undergarments & Loungewear",
+	],
+	"Men's Fashion": [
+		"Activewear",
+		"Tops & Sets",
+		"Bottoms",
+		"Footwear",
+		"Muslim Wear",
+		"Coats, Jackets & Outerwear",
+		"Bags",
+		"Watches & Accessories",
+	],
+	"Beauty & Personal Care": [
+		"Sanitisers & Disinfectants",
+		"Hands & Nails",
+		"Ear Care",
+		"Vision Care",
+		"Foot Care",
+		"Oral Care",
+		"Sanitary Hygiene",
+		"Fragrance & Deodorants",
+		"Bath & Body",
+		"Face",
+		"Hair",
+		"Men's Grooming",
+	],
+	"Luxury": [
+		"Bags & Wallets",
+		"Apparel",
+		"Accessories",
+		"Watches",
+		"Sneakers & Footwear",
+	],
+	"Video Gaming": [
+		"Video Game Consoles",
+		"Video Games",
+		"Gaming Accessories",
+	],
+	"Audio": [
+		"Earphones",
+		"Headphones & Headsets",
+		"Microphones",
+		"Voice Recorders",
+		"Portable Music Players",
+		"Portable Audio Accessories",
+		"Soundbars, Speakers & Amplifiers",
+		"Other Audio Equipment",
+	],
+	"Photography": [
+		"Cameras",
+		"Lens & Kits",
+		"Drones",
+		"Video Cameras",
+		"Photography Accessories",
+	],
+	"Furniture & Home Living": [
+		"Furniture",
+		"Outdoor Furniture",
+		"Lighting & Fans",
+		"Home Decor",
+		"Home Fragrance",
+		"Bedding & Towels",
+		"Bathroom & Kitchen Fixtures",
+		"Home Improvement & Organisation",
+		"Cleaning & Homecare Supplies",
+		"Kitchenware & Tableware",
+		"Security & Locks",
+		"Gardening",
+	],
+	"TV & Home Appliances": [
+		"TV & Entertainment",
+		"Kitchen Appliances",
+		"Air Conditioners & Heating",
+		"Washing Machines & Dryers",
+		"Vacuum Cleaner & Housekeeping",
+		"Water Heater & Instant Showers",
+		"Air Purifiers & Dehumidifiers",
+		"Electrical, Adapters & Sockets",
+		"Iron & Steamers",
+		"Other Home Appliances",
+	],
+	"Babies & Kids": [
+		"Babies & Kids Fashion",
+		"Baby Nursery & Kids Furniture",
+		"Going Out",
+		"Bathing & Changing",
+		"Nursing & Feeding",
+		"Baby Monitors",
+		"Maternity Care",
+		"Infant Playtime",
+	],
+	"Hobbies & Toys": [
+		"Toys & Games",
+		"Music & Media",
+		"Books & Magazines",
+		"Stationary & Craft",
+		"Collectibles & Memorabilia",
+		"Travel",
+	],
+	"Health & Nutrition": [
+		"Insect Repellent",
+		"Massage Devices",
+		"Assistive & Rehabilatory Aids",
+		"Face Masks & Face Shields",
+		"Thermometers",
+		"Medical Supplies & Tools",
+		"Health Supplements",
+		"Braces, Support & Protection",
+		"Health Monitors & Weighing Scales",
+	],
+	"Sports Equipment": [
+		"Sports & Games",
+		"Exercise & Fitness",
+		"Bicycles & Parts",
+		"Fishing",
+		"Hiking & Camping",
+		"Other Sports Equipment and Supplies",
+	],
+	"Auto Accessories": [],
+	"Pet Supplies": [
+		"Homes & Other Pet Accessories",
+		"Pet Food",
+		"Health & Grooming",
+	],
+}
+
+VALID_CATEGORIES: frozenset[str] = frozenset(CATEGORIES_MAP.keys())
+
 
 def _ensure_storage() -> None:
 	INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
@@ -264,6 +423,7 @@ def create_app() -> Flask:
 					("quantity", "INTEGER"),
 					("sku", "TEXT"),
 					("is_active", "INTEGER"),
+					("subcategory", "TEXT"),
 				],
 				"offer": [
 					("buyer_id", "INTEGER"),
@@ -306,7 +466,7 @@ def create_app() -> Flask:
 			category=category,
 			listings=listings,
 			featured=_featured_listings(limit=4),
-			categories=tuple(sorted({listing.category for listing in Item.query.all()})),
+			categories=list(CATEGORIES_MAP.keys()),
 			activity_feed=offer_board.recent_activity(limit=5),
 			listing_count=Item.query.count(),
 		)
@@ -351,6 +511,7 @@ def create_app() -> Flask:
 		if request.method == "POST":
 			title = request.form.get("title", "").strip()
 			category = request.form.get("category", "").strip()
+			subcategory = request.form.get("subcategory", "").strip()
 			price_text = request.form.get("price", "").strip()
 			condition = request.form.get("condition", "").strip() or "Good"
 			location = request.form.get("location", "").strip() or "Local pickup"
@@ -363,6 +524,14 @@ def create_app() -> Flask:
 			if not title or not category or not price_text or not description:
 				flash("Title, category, price, and description are required.", "warning")
 				return redirect(url_for("sell"))
+
+			if category not in VALID_CATEGORIES:
+				flash("Please select a valid category.", "warning")
+				return redirect(url_for("sell"))
+
+			valid_subs = CATEGORIES_MAP.get(category, [])
+			if valid_subs and subcategory not in valid_subs:
+				subcategory = ""
 
 			try:
 				price = Decimal(price_text)
@@ -383,6 +552,8 @@ def create_app() -> Flask:
 				seed_image_data=seed_image_data,
 				tags_csv=serialize_tags(tags),
 			)
+			if hasattr(listing, "subcategory"):
+				listing.subcategory = subcategory
 			db.session.add(listing)
 			db.session.commit()
 			flash("Your listing is now live on Baasket.", "success")
@@ -391,7 +562,7 @@ def create_app() -> Flask:
 		return render_template(
 			"sell.html",
 			title="Sell on Baasket",
-			categories=tuple(sorted({listing.category for listing in Item.query.all()})),
+			categories_map=CATEGORIES_MAP,
 		)
 
 	@app.get("/cart")
@@ -762,8 +933,19 @@ def create_app() -> Flask:
 			return redirect(url_for("dashboard"))
 
 		if request.method == "POST":
+			new_category = request.form.get("category", "").strip()
+			if new_category and new_category in VALID_CATEGORIES:
+				listing.category = new_category
+			elif new_category:
+				flash("Please select a valid category.", "warning")
+				return redirect(url_for("edit_listing", listing_id=listing.id))
+
+			new_subcategory = request.form.get("subcategory", "").strip()
+			valid_subs = CATEGORIES_MAP.get(listing.category, [])
+			if hasattr(listing, "subcategory"):
+				listing.subcategory = new_subcategory if new_subcategory in valid_subs else ""
+
 			listing.title = request.form.get("title", "").strip() or listing.title
-			listing.category = request.form.get("category", "").strip() or listing.category
 			listing.condition = request.form.get("condition", "").strip() or listing.condition
 			listing.location = request.form.get("location", "").strip() or listing.location
 			listing.description = request.form.get("description", "").strip() or listing.description
@@ -793,7 +975,7 @@ def create_app() -> Flask:
 			"edit_listing.html",
 			title="Edit Listing | Baasket",
 			listing=listing,
-			categories=tuple(sorted({item.category for item in Item.query.all()})),
+			categories_map=CATEGORIES_MAP,
 		)
 
 	@app.post("/dashboard/listings/<int:listing_id>/delete")

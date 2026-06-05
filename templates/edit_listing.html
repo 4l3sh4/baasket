@@ -9,53 +9,102 @@
       <p>Update the details, refresh the photo, or change the listing type without recreating the item.</p>
     </div>
 
-    <form method="post" enctype="multipart/form-data" class="stack-form">
+    <form method="post" enctype="multipart/form-data" class="stack-form" id="edit-form">
+
       <label>
         Title
         <input type="text" name="title" value="{{ listing.title }}" required>
       </label>
+
       <label>
         Category
-        <input list="category-options" type="text" name="category" value="{{ listing.category }}" required>
-        <datalist id="category-options">
-          {% for option in categories %}
-            <option value="{{ option }}"></option>
-          {% endfor %}
-        </datalist>
+        <div class="select-wrap">
+          <select name="category" id="category-select" required>
+            <option value="" disabled>Select a category…</option>
+            {% for cat in categories_map.keys() %}
+              <option value="{{ cat }}" {% if cat == listing.category %}selected{% endif %}>{{ cat }}</option>
+            {% endfor %}
+          </select>
+          <span class="select-arrow">▾</span>
+        </div>
       </label>
+
+      {% set current_sub = listing.subcategory if listing.subcategory is defined else '' %}
+      {% set current_subs = categories_map.get(listing.category, []) %}
+      <label id="subcategory-label" class="subcategory-label" {% if not current_subs %}style="display:none;"{% endif %}>
+        Subcategory
+        <div class="select-wrap">
+          <select name="subcategory" id="subcategory-select">
+            <option value="" {% if not current_sub %}selected{% endif %}>— none —</option>
+            {% for sub in current_subs %}
+              <option value="{{ sub }}" {% if sub == current_sub %}selected{% endif %}>{{ sub }}</option>
+            {% endfor %}
+          </select>
+          <span class="select-arrow">▾</span>
+        </div>
+      </label>
+
       <label>
-        Price
-        <input type="number" name="price" step="0.01" min="0.01" value="{{ listing.price }}" required>
+        Price (S$)
+        <div class="price-input-wrap">
+          <span class="price-prefix">S$</span>
+          <input type="number" name="price" step="0.01" min="0.01" value="{{ listing.price }}" required>
+        </div>
       </label>
-      <label>
-        Condition
-        <input type="text" name="condition" value="{{ listing.condition }}">
-      </label>
+
+      <div class="form-two-col">
+        <label>
+          Condition
+          <div class="select-wrap">
+            <select name="condition">
+              {% for cond in ['Brand New', 'Like New', 'Lightly Used', 'Well Used', 'Heavily Used', 'For Parts'] %}
+                <option value="{{ cond }}" {% if cond == listing.condition %}selected{% endif %}>{{ cond }}</option>
+              {% endfor %}
+            </select>
+            <span class="select-arrow">▾</span>
+          </div>
+        </label>
+
+        <label>
+          Listing type
+          <div class="select-wrap">
+            <select name="kind">
+              <option value="standard" {% if listing.kind == 'standard' %}selected{% endif %}>Standard</option>
+              <option value="fresh"    {% if listing.kind == 'fresh'    %}selected{% endif %}>Fresh Drop</option>
+              <option value="featured" {% if listing.kind == 'featured' %}selected{% endif %}>Featured</option>
+              <option value="limited"  {% if listing.kind == 'limited'  %}selected{% endif %}>Limited Stock</option>
+            </select>
+            <span class="select-arrow">▾</span>
+          </div>
+        </label>
+      </div>
+
       <label>
         Location
         <input type="text" name="location" value="{{ listing.location }}">
       </label>
+
       <label>
-        Tags
-        <input type="text" name="tags" value="{{ listing.tags|join(', ') }}">
+        Tags <span class="field-hint">separate with commas</span>
+        <input type="text" name="tags" value="{{ listing.tags | join(', ') }}">
       </label>
+
       <label>
-        New listing image
-        <input type="file" name="image" accept="image/*">
+        Replace image <span class="field-hint">optional — leave blank to keep existing</span>
+        <div class="file-drop-zone" id="file-drop-zone">
+          <input type="file" name="image" accept="image/*" id="image-input" class="file-input-hidden">
+          <div class="file-drop-inner" id="file-drop-inner">
+            <span class="file-drop-icon">📷</span>
+            <span class="file-drop-text">Click to upload or drag a new image here</span>
+          </div>
+        </div>
       </label>
-      <label>
-        Listing type
-        <select name="kind">
-          <option value="standard" {% if listing.kind == 'standard' %}selected{% endif %}>Standard</option>
-          <option value="fresh" {% if listing.kind == 'fresh' %}selected{% endif %}>Fresh</option>
-          <option value="featured" {% if listing.kind == 'featured' %}selected{% endif %}>Featured</option>
-          <option value="limited" {% if listing.kind == 'limited' %}selected{% endif %}>Limited</option>
-        </select>
-      </label>
+
       <label>
         Description
         <textarea name="description" rows="7" required>{{ listing.description }}</textarea>
       </label>
+
       <div class="action-row">
         <button type="submit" class="primary-button">Save changes</button>
         <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="secondary-button">Cancel</a>
@@ -71,4 +120,54 @@
     <img src="{{ listing.image_data }}" alt="{{ listing.title }}" class="detail-image">
   </aside>
 </section>
+
+<script>
+(function () {
+  var CATS = {{ categories_map | tojson }};
+  var CURRENT_SUB = {{ (listing.subcategory if listing.subcategory is defined else '') | tojson }};
+
+  var catSel  = document.getElementById('category-select');
+  var subWrap = document.getElementById('subcategory-label');
+  var subSel  = document.getElementById('subcategory-select');
+
+  function refreshSubs(preserve) {
+    var subs = CATS[catSel.value] || [];
+    subSel.innerHTML = '<option value="">— none —</option>';
+    subs.forEach(function (s) {
+      var opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = s;
+      if (s === preserve) opt.selected = true;
+      subSel.appendChild(opt);
+    });
+    subWrap.style.display = subs.length ? '' : 'none';
+  }
+
+  catSel.addEventListener('change', function () { refreshSubs(''); });
+  if (catSel.value) refreshSubs(CURRENT_SUB);
+
+  var zone  = document.getElementById('file-drop-zone');
+  var inp   = document.getElementById('image-input');
+  var inner = document.getElementById('file-drop-inner');
+
+  zone.addEventListener('click', function () { inp.click(); });
+  inp.addEventListener('change', function () {
+    if (inp.files && inp.files[0]) {
+      inner.innerHTML = '<span class="file-drop-icon">\u2705</span><span class="file-drop-text">' + inp.files[0].name + '</span>';
+    }
+  });
+  zone.addEventListener('dragover', function (e) { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', function () { zone.classList.remove('drag-over'); });
+  zone.addEventListener('drop', function (e) {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      var dt = new DataTransfer();
+      dt.items.add(e.dataTransfer.files[0]);
+      inp.files = dt.files;
+      inner.innerHTML = '<span class="file-drop-icon">\u2705</span><span class="file-drop-text">' + e.dataTransfer.files[0].name + '</span>';
+    }
+  });
+})();
+</script>
 {% endblock %}

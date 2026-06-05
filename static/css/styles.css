@@ -1571,3 +1571,176 @@ h3 {
     display: none;
   }
 }
+/* ============================================================
+   BEAUTIFUL SELECT DROPDOWNS & SELL FORM IMPROVEMENTS
+   ============================================================ */
+
+/* Custom select wrapper — positions the arrow overlay */
+.select-wrap {
+  position: relative;
+  display: block;
+}
+
+.select-wrap select {
+  width: 100%;
+  padding: 14px 42px 14px 16px;   /* extra right padding for the arrow */
+  border: 1px solid rgba(21, 32, 43, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  line-height: 1.4;
+}
+
+.select-wrap select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(226, 109, 92, 0.14);
+}
+
+.select-wrap select:hover {
+  border-color: rgba(21, 32, 43, 0.26);
+}
+
+/* Animated chevron arrow */
+.select-arrow {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-size: 0.85rem;
+  color: var(--muted);
+  transition: transform 0.2s ease;
+}
+
+.select-wrap:focus-within .select-arrow {
+  transform: translateY(-50%) rotate(180deg);
+  color: var(--accent);
+}
+
+/* Override the old naked stack-form select styles — keep them using select-wrap now */
+.stack-form .select-wrap select {
+  /* already styled above — just inherit */
+}
+
+/* Two-column layout for Condition + Listing type side by side */
+.form-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 560px) {
+  .form-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Price input with S$ prefix */
+.price-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.price-prefix {
+  position: absolute;
+  left: 16px;
+  font-weight: 700;
+  color: var(--muted);
+  pointer-events: none;
+  font-size: 0.95rem;
+}
+
+.price-input-wrap input {
+  padding-left: 36px !important;
+}
+
+/* Field hints (e.g. "optional") */
+.field-hint {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 6px;
+}
+
+/* Subcategory label — hidden until category chosen */
+.subcategory-label {
+  transition: opacity 0.2s ease;
+}
+
+/* File drop zone */
+.file-drop-zone {
+  border: 2px dashed rgba(21, 32, 43, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.file-drop-zone:hover,
+.file-drop-zone.drag-over {
+  border-color: var(--accent);
+  background: rgba(226, 109, 92, 0.05);
+}
+
+.file-input-hidden {
+  display: none !important;
+}
+
+.file-drop-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.file-drop-icon {
+  font-size: 1.8rem;
+}
+
+.file-drop-text {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--ink);
+}
+
+.file-drop-hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* Publish button full width */
+.publish-btn {
+  width: 100%;
+  justify-content: center;
+  font-size: 1rem;
+  padding: 16px 20px;
+  border-radius: 18px;
+  margin-top: 4px;
+}
+
+/* Sell aside layout */
+.sell-aside {
+  position: sticky;
+  top: 92px;
+  align-self: start;
+}
+
+/* Search bar — make its select also use the nice style */
+.search-bar select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%235b6775' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+  cursor: pointer;
+}

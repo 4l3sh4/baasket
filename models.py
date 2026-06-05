@@ -47,6 +47,7 @@ class ListingModel(db.Model):
     seller_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
     title = db.Column(db.String(140), nullable=False, index=True)
     category = db.Column(db.String(80), nullable=False, index=True)
+    subcategory = db.Column(db.String(120), nullable=False, default="")
     price = db.Column(db.Numeric(10, 2), nullable=False)
     condition = db.Column(db.String(80), nullable=False)
     location = db.Column(db.String(80), nullable=False)

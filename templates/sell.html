@@ -6,93 +6,193 @@
     <div class="section-heading compact">
       <p class="eyebrow">Sell on Baasket</p>
       <h1>Create a new listing</h1>
-      <p>Every listing is stored in the database and created through the same factory-inspired flow, keeping item data consistent no matter how it enters the market.</p>
+      <p>Fill in the details below and your item will be live on the marketplace.</p>
     </div>
 
-    <form method="post" action="{{ url_for('sell') }}" class="stack-form" enctype="multipart/form-data">
+    <form method="post" action="{{ url_for('sell') }}" class="stack-form" enctype="multipart/form-data" id="sell-form">
       <div class="seller-context">
         <span>Listing as</span>
         <strong>{{ current_user.username }}</strong>
       </div>
+
       <label>
         Title
-        <input type="text" name="title" placeholder="Portable projector" required>
+        <input type="text" name="title" placeholder="e.g. Sony WH-1000XM5 Headphones" required>
       </label>
+
       <label>
         Category
-        <input list="category-options" type="text" name="category" placeholder="Electronics" required>
-        <datalist id="category-options">
-          {% for option in categories %}
-            <option value="{{ option }}"></option>
-          {% endfor %}
-        </datalist>
+        <div class="select-wrap">
+          <select name="category" id="category-select" required>
+            <option value="" disabled selected>Select a category…</option>
+            {% for cat in categories_map.keys() %}
+              <option value="{{ cat }}">{{ cat }}</option>
+            {% endfor %}
+          </select>
+          <span class="select-arrow">▾</span>
+        </div>
       </label>
+
+      <label id="subcategory-label" class="subcategory-label" style="display:none;">
+        Subcategory
+        <div class="select-wrap">
+          <select name="subcategory" id="subcategory-select">
+            <option value="" disabled selected>Select a subcategory…</option>
+          </select>
+          <span class="select-arrow">▾</span>
+        </div>
+      </label>
+
       <label>
-        Asking price
-        <input type="number" name="price" step="0.01" min="0.01" placeholder="150.00" required>
+        Asking price (S$)
+        <div class="price-input-wrap">
+          <span class="price-prefix">S$</span>
+          <input type="number" name="price" step="0.01" min="0.01" placeholder="0.00" required>
+        </div>
       </label>
-      <label>
-        Condition
-        <input type="text" name="condition" placeholder="Like new">
-      </label>
+
+      <div class="form-two-col">
+        <label>
+          Condition
+          <div class="select-wrap">
+            <select name="condition">
+              <option value="Brand New">Brand New</option>
+              <option value="Like New">Like New</option>
+              <option value="Lightly Used" selected>Lightly Used</option>
+              <option value="Well Used">Well Used</option>
+              <option value="Heavily Used">Heavily Used</option>
+              <option value="For Parts">For Parts</option>
+            </select>
+            <span class="select-arrow">▾</span>
+          </div>
+        </label>
+
+        <label>
+          Listing type
+          <div class="select-wrap">
+            <select name="kind">
+              <option value="standard" selected>Standard</option>
+              <option value="fresh">Fresh Drop</option>
+              <option value="featured">Featured</option>
+              <option value="limited">Limited Stock</option>
+            </select>
+            <span class="select-arrow">▾</span>
+          </div>
+        </label>
+      </div>
+
       <label>
         Location
-        <input type="text" name="location" placeholder="Orchard">
+        <input type="text" name="location" placeholder="e.g. Petaling Jaya, KL">
       </label>
+
       <label>
-        Tags
-        <input type="text" name="tags" placeholder="projector, home, entertainment">
+        Tags <span class="field-hint">optional — separate with commas</span>
+        <input type="text" name="tags" placeholder="e.g. wireless, noise-cancelling, sony">
       </label>
+
       <label>
-        Listing image
-        <input type="file" name="image" accept="image/*">
+        Listing image <span class="field-hint">optional</span>
+        <div class="file-drop-zone" id="file-drop-zone">
+          <input type="file" name="image" accept="image/*" id="image-input" class="file-input-hidden">
+          <div class="file-drop-inner" id="file-drop-inner">
+            <span class="file-drop-icon">📷</span>
+            <span class="file-drop-text">Click to upload or drag an image here</span>
+            <span class="file-drop-hint">JPG, PNG, WEBP up to 10 MB</span>
+          </div>
+        </div>
       </label>
-      <label>
-        Listing type
-        <select name="kind">
-          <option value="standard">Standard</option>
-          <option value="fresh">Fresh</option>
-          <option value="featured">Featured</option>
-          <option value="limited">Limited</option>
-        </select>
-      </label>
+
       <label>
         Description
-        <textarea name="description" rows="6" placeholder="Write a clear description for buyers." required></textarea>
+        <textarea name="description" rows="6" placeholder="Describe your item honestly — condition, accessories included, reason for selling…" required></textarea>
       </label>
-      <button type="submit" class="primary-button">Publish listing</button>
+
+      <button type="submit" class="primary-button publish-btn">Publish listing →</button>
     </form>
   </article>
 
-  <aside class="card-surface">
+  <aside class="card-surface sell-aside">
     <div class="section-heading compact">
-      <h2>Marketplace rules</h2>
-      <p>These defaults keep the experience clean and predictable.</p>
+      <h2>Listing tips</h2>
+      <p>Good listings sell faster.</p>
     </div>
 
     <div class="feed-list">
       <article class="feed-item">
         <span class="feed-dot"></span>
         <div>
-          <strong>Factory pattern</strong>
-          <p>Listings are built from a single creation path, so item types stay consistent.</p>
+          <strong>Clear photos</strong>
+          <p>Upload a well-lit photo — buyers are 3× more likely to enquire on listings with images.</p>
         </div>
       </article>
       <article class="feed-item">
         <span class="feed-dot"></span>
         <div>
-          <strong>Strategy pattern</strong>
-          <p>Checkout can switch between payment methods without changing the route logic.</p>
+          <strong>Honest condition</strong>
+          <p>Accurately describing wear and tear builds trust and avoids disputes.</p>
         </div>
       </article>
       <article class="feed-item">
         <span class="feed-dot"></span>
         <div>
-          <strong>Observer pattern</strong>
-          <p>Offers notify the seller inbox and the activity feed at the same time.</p>
+          <strong>Competitive price</strong>
+          <p>Check similar listings first. Offers are always welcome once you're live.</p>
         </div>
       </article>
     </div>
+
+    <div class="panel-note">
+      <h3>Marketplace rules</h3>
+      <p>Listings are built through a single creation path, keeping item data consistent no matter how it enters the market.</p>
+    </div>
   </aside>
 </section>
+
+<script>
+(function () {
+  var CATS = {{ categories_map | tojson }};
+
+  var catSel  = document.getElementById('category-select');
+  var subWrap = document.getElementById('subcategory-label');
+  var subSel  = document.getElementById('subcategory-select');
+
+  function refreshSubs() {
+    var subs = CATS[catSel.value] || [];
+    subSel.innerHTML = '<option value="" disabled selected>Select a subcategory\u2026</option>';
+    subs.forEach(function (s) {
+      var opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = s;
+      subSel.appendChild(opt);
+    });
+    subWrap.style.display = subs.length ? '' : 'none';
+  }
+
+  catSel.addEventListener('change', refreshSubs);
+
+  var zone  = document.getElementById('file-drop-zone');
+  var inp   = document.getElementById('image-input');
+  var inner = document.getElementById('file-drop-inner');
+
+  zone.addEventListener('click', function () { inp.click(); });
+  inp.addEventListener('change', function () {
+    if (inp.files && inp.files[0]) {
+      inner.innerHTML = '<span class="file-drop-icon">\u2705</span><span class="file-drop-text">' + inp.files[0].name + '</span>';
+    }
+  });
+  zone.addEventListener('dragover', function (e) { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', function () { zone.classList.remove('drag-over'); });
+  zone.addEventListener('drop', function (e) {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      var dt = new DataTransfer();
+      dt.items.add(e.dataTransfer.files[0]);
+      inp.files = dt.files;
+      inner.innerHTML = '<span class="file-drop-icon">\u2705</span><span class="file-drop-text">' + e.dataTransfer.files[0].name + '</span>';
+    }
+  });
+})();
+</script>
 {% endblock %}
