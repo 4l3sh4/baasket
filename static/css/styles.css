@@ -8,7 +8,7 @@
   --muted: #5b6775;
   --line: rgba(21, 32, 43, 0.12);
   --accent: #e26d5c;
-  --accent-deep: #1f6f78;
+  --accent-deep: #DB5E4D;
   --accent-soft: #ffd6cc;
   --success: #1f7a54;
   --warning: #a96c08;
@@ -34,7 +34,7 @@ body {
     radial-gradient(circle at top right, rgba(31, 111, 120, 0.14), transparent 32%),
     linear-gradient(180deg, #f7f1e7 0%, #f3efe8 42%, #e9eef2 100%);
   color: var(--ink);
-  font-family: "Trebuchet MS", "Gill Sans", "Segoe UI", sans-serif;
+  font-family: "Lexend", "Trebuchet MS", "Gill Sans", "Segoe UI", sans-serif;
 }
 
 img {
@@ -86,16 +86,15 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Lexend", Georgia, "Times New Roman", serif;
   font-weight: 700;
   font-size: 1.55rem;
   letter-spacing: 0.02em;
 }
 
 .brand-logo {
-  width: 42px;
+  width: 217px;
   height: 42px;
-  object-fit: contain;
 }
 
 .nav-links {
@@ -110,7 +109,7 @@ textarea {
   gap: 8px;
   padding: 10px 14px;
   border-radius: 999px;
-  color: var(--muted);
+  color: var(--accent);
 }
 
 .nav-links a:hover {
@@ -215,7 +214,7 @@ h1,
 h2,
 h3 {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Lexend", Georgia, "Times New Roman", serif;
   line-height: 1.06;
 }
 

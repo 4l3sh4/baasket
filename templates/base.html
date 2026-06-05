@@ -6,13 +6,15 @@
   <title>{{ title or "Baasket" }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
   <script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@100..900&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="page-shell"></div>
   <header class="topbar">
     <a class="brand" href="{{ url_for('index') }}">
       <img src="{{ brand_logo }}" alt="Baasket logo" class="brand-logo">
-      <span>Baasket</span>
     </a>
     <nav class="nav-links">
       <a href="{{ url_for('index') }}">Discover</a>
