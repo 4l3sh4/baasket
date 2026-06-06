@@ -28,7 +28,7 @@
   </div>
 </section>
 
-<section class="detail-grid secondary-grid">
+<section class="section-block">
   <article class="card-surface reveal" data-reveal>
     <div class="section-heading compact">
       <h2>Update profile</h2>
@@ -48,26 +48,6 @@
     </form>
   </article>
 
-  <article class="card-surface reveal" data-reveal>
-    <div class="section-heading compact">
-      <h2>Recent offers</h2>
-      <p>New buyer messages sorted by newest first.</p>
-    </div>
-
-    <div class="feed-list compact-feed">
-      {% for offer in recent_offers %}
-        <article class="feed-item small">
-          <span class="feed-dot"></span>
-          <div>
-            <strong>{{ offer.buyer_display }} · {{ offer.amount_label }}</strong>
-            <p>{{ offer.listing.title }}</p>
-          </div>
-        </article>
-      {% else %}
-        <p class="empty-state">No offers yet. Buyers will appear here once they start negotiating.</p>
-      {% endfor %}
-    </div>
-  </article>
 </section>
 
 <section class="section-block">

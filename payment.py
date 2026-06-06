@@ -51,8 +51,8 @@ class CardPaymentStrategy(BasePaymentStrategy):
     fee_rate = Decimal("0.025")
 
     def process(self, subtotal: Decimal, **context: object) -> PaymentReceipt:
-        buyer = str(context.get("buyer_name", "Customer"))
-        return self._build_receipt(subtotal, f"Card payment approved for {buyer}.")
+        sender = str(context.get("sender_name", "Customer"))
+        return self._build_receipt(subtotal, f"Card payment approved for {sender}.")
 
 
 class WalletPaymentStrategy(BasePaymentStrategy):
@@ -61,7 +61,7 @@ class WalletPaymentStrategy(BasePaymentStrategy):
     fee_rate = Decimal("0.010")
 
     def process(self, subtotal: Decimal, **context: object) -> PaymentReceipt:
-        email = str(context.get("buyer_email", ""))
+        email = str(context.get("sender_email", ""))
         suffix = f" for {email}" if email else ""
         return self._build_receipt(subtotal, f"Wallet transfer confirmed{suffix}.")
 

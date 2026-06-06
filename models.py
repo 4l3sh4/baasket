@@ -101,17 +101,18 @@ class ListingModel(db.Model):
 class Offer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     listing_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=False, index=True)
-    buyer_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
-    status = db.Column(db.String(20), nullable=False, default="pending")
-    amount = db.Column(db.Numeric(10, 2), nullable=False)
-    message = db.Column(db.Text, nullable=False, default="")
+    sender_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
+    receiver_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    acceptanceStatus = db.Column(db.String(20), nullable=False, default="pending")
 
-    buyer = db.relationship("User", foreign_keys=[buyer_id], backref="offers_made")
+    sender = db.relationship("User", foreign_keys=[sender_id], backref="offers_sent")
+    receiver = db.relationship("User", foreign_keys=[receiver_id], backref="offers_received")
 
     @property
     def buyer_display(self) -> str:
-        return self.buyer.username if getattr(self, "buyer", None) else "Unknown buyer"
+        return self.sender.username if getattr(self, "sender", None) else "Unknown buyer"
 
     @property
     def amount_label(self) -> str:
@@ -326,13 +327,15 @@ class Message(db.Model):
 class Payment(db.Model):
     __tablename__ = "payment"
     paymentID = db.Column(db.String(36), primary_key=True)
+    offer_id = db.Column(db.Integer, db.ForeignKey("offer.id"), nullable=True, index=True)
+    item_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=True, index=True)
+    sender_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
+    receiver_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
+    senderBankAccountNum = db.Column(db.String(64), db.ForeignKey("bank_account.bankAccountNum"), nullable=True)
+    receiverBankAccountNum = db.Column(db.String(64), db.ForeignKey("bank_account.bankAccountNum"), nullable=True)
     paymentType = db.Column(db.String(80), nullable=False)
     status = db.Column(db.String(80), nullable=False, default="created")
     transactionDate = db.Column(db.DateTime, nullable=True)
-    buyer_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
-    order_id = db.Column(db.Integer, db.ForeignKey("order_model.id"), nullable=True, index=True)
-    gateway_reference = db.Column(db.String(64), nullable=True, default="")
-    provider = db.Column(db.String(64), nullable=True, default="")
 
     def authorizePayment(self) -> bool:
         self.status = "authorized"

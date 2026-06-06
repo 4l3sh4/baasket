@@ -53,12 +53,12 @@ class OfferBoard:
         self._activity_feed = ActivityFeedObserver()
         self._observers = observers or [self._seller_inbox, self._activity_feed]
 
-    def submit_offer(self, listing: object, amount: Decimal, message: str, buyer_id: int | None = None) -> Offer:
+    def submit_offer(self, listing: object, amount: Decimal, sender_id: int | None = None, receiver_id: int | None = None) -> Offer:
         offer = Offer(
             listing_id=int(getattr(listing, "id")),
-            buyer_id=buyer_id,
+            sender_id=sender_id,
+            receiver_id=receiver_id,
             amount=amount,
-            message=message,
         )
         db.session.add(offer)
         db.session.commit()
@@ -70,23 +70,6 @@ class OfferBoard:
             Offer.query.filter_by(listing_id=listing_id)
             .order_by(Offer.created_at.desc())
             .all()
-        )
-
-    def recent_activity(self, limit: int = 5) -> tuple[dict[str, object], ...]:
-        recent_offers = (
-            Offer.query.join(Item, Offer.listing_id == Item.id)
-            .order_by(Offer.created_at.desc())
-            .limit(limit)
-            .all()
-        )
-        return tuple(
-            {
-                "listing_id": offer.listing_id,
-                "headline": f"Offer on {offer.listing.title}",
-                "detail": f"{offer.buyer_display} submitted {offer.amount_label}.",
-                "timestamp": offer.created_at,
-            }
-            for offer in recent_offers
         )
 
     def seller_messages(self, listing_id: int) -> tuple[str, ...]:

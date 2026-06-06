@@ -461,7 +461,6 @@ def create_app() -> Flask:
 			listings=listings,
 			featured=_featured_listings(limit=4),
 			categories=list(CATEGORIES_MAP.keys()),
-			activity_feed=offer_board.recent_activity(limit=5),
 			listing_count=Item.query.count(),
 		)
 
@@ -472,17 +471,11 @@ def create_app() -> Flask:
 			flash("That listing is no longer available.", "warning")
 			return redirect(url_for("index"))
 
-		offers = (
-			Offer.query.filter_by(listing_id=listing.id)
-			.order_by(Offer.created_at.desc())
-			.all()
-		)
 		return render_template(
 			"listing.html",
 			title=f"{listing.title} | Baasket",
 			listing=listing,
 			related=_related_listings(listing, limit=3),
-			offers=offers,
 		)
 
 	@app.post("/listing/<int:listing_id>/cart")
@@ -594,8 +587,8 @@ def create_app() -> Flask:
 		receipt = payment_gateway.charge(
 			payment_method,
 			subtotal,
-			buyer_name=buyer_name,
-			buyer_email=buyer_email,
+			sender_name=buyer_name,
+			sender_email=buyer_email,
 			note=note,
 			items=[line["listing"].title for line in lines],
 		)
@@ -761,7 +754,6 @@ def create_app() -> Flask:
 			flash("Sellers cannot make offers on their own listings.", "warning")
 			return redirect(url_for("chat_view", chat_id=chat_id))
 		amount_text = request.form.get("amount", "").strip()
-		message = request.form.get("message", "").strip()
 		try:
 			amount = Decimal(amount_text)
 		except Exception:
@@ -770,7 +762,7 @@ def create_app() -> Flask:
 		if amount <= 0:
 			flash("Offer amounts must be greater than zero.", "warning")
 			return redirect(url_for("chat_view", chat_id=chat_id))
-		offer = Offer(listing_id=listing.id, buyer_id=current_user.id, amount=amount, message=message)
+		offer = Offer(listing_id=listing.id, sender_id=current_user.id, receiver_id=listing.seller_id, amount=amount)
 		db.session.add(offer)
 		db.session.flush()  # populate offer.id before commit
 		# Post a message into the chat thread so the offer appears inline
@@ -793,10 +785,10 @@ def create_app() -> Flask:
 			flash("Not authorised.", "warning")
 			return redirect(url_for("index"))
 		offer = db.session.get(Offer, offer_id)
-		if offer is None or offer.status != "pending":
+		if offer is None or offer.acceptanceStatus != "pending":
 			flash("Offer not found or already resolved.", "warning")
 			return redirect(url_for("chat_view", chat_id=chat_id))
-		offer.status = "accepted"
+		offer.acceptanceStatus = "accepted"
 		notify = Message(
 			messageID=uuid4().hex,
 			content=f"✓ Offer of {offer.amount_label} accepted! Please proceed with payment.",
@@ -816,10 +808,10 @@ def create_app() -> Flask:
 			flash("Not authorised.", "warning")
 			return redirect(url_for("index"))
 		offer = db.session.get(Offer, offer_id)
-		if offer is None or offer.status != "pending":
+		if offer is None or offer.acceptanceStatus != "pending":
 			flash("Offer not found or already resolved.", "warning")
 			return redirect(url_for("chat_view", chat_id=chat_id))
-		offer.status = "declined"
+		offer.acceptanceStatus = "declined"
 		notify = Message(
 			messageID=uuid4().hex,
 			content=f"✕ The offer of {offer.amount_label} was declined.",
@@ -899,20 +891,12 @@ def create_app() -> Flask:
 			.order_by(Item.created_at.desc())
 			.all()
 		)
-		recent_offers = (
-			Offer.query.join(Item)
-			.filter(Item.seller_id == current_user.id)
-			.order_by(Offer.created_at.desc())
-			.limit(12)
-			.all()
-		)
 		sales_history = _sales_history_for_user(current_user.id)
 		stats = _listing_stats_for_user(current_user.id)
 		return render_template(
 			"dashboard.html",
 			title="Seller Dashboard | Baasket",
 			listings=listings,
-			recent_offers=recent_offers,
 			sales_history=sales_history,
 			stats=stats,
 		)

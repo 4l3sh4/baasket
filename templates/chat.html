@@ -72,20 +72,18 @@
               {% endfor %}
 
               <div class="msg-row {{ 'msg-row--me' if is_me else 'msg-row--them' }}">
-                <div class="offer-bubble {{ 'offer-bubble--me' if is_me else 'offer-bubble--them' }} {{ 'offer-' + offer.obj.status if offer.obj else '' }}">
+                <div class="offer-bubble {{ 'offer-bubble--me' if is_me else 'offer-bubble--them' }} {{ 'offer-' + offer.obj.acceptanceStatus if offer.obj else '' }}">
                   <div class="offer-badge">
                     <span class="offer-icon">🏷️</span>
                     <span class="offer-label">Price Offer</span>
                     {% if offer.obj %}
-                      <span class="offer-status-chip status-{{ offer.obj.status }}">{{ offer.obj.status | capitalize }}</span>
+                      <span class="offer-status-chip status-{{ offer.obj.acceptanceStatus }}">{{ offer.obj.acceptanceStatus | capitalize }}</span>
                     {% endif %}
                   </div>
 
                   {% if offer.obj %}
                     <div class="offer-amount">{{ offer.obj.amount_label }}</div>
-                    {% if offer.obj.message %}
-                      <p class="offer-note">"{{ offer.obj.message }}"</p>
-                    {% endif %}
+
                   {% else %}
                     <div class="offer-amount offer-amount--ghost">Offer #{{ offer_id }}</div>
                   {% endif %}
@@ -96,7 +94,7 @@
                   </div>
 
                   {# Accept / Decline buttons — only for seller, only when pending #}
-                  {% if offer.obj and offer.obj.status == 'pending' and current_user.id == chat.seller_id %}
+                  {% if offer.obj and offer.obj.acceptanceStatus == 'pending' and current_user.id == chat.seller_id %}
                     <div class="offer-actions">
                       <form method="post" action="{{ url_for('accept_offer', chat_id=chat.chatID, offer_id=offer.obj.id) }}">
                         <button type="submit" class="offer-btn offer-btn--accept">✓ Accept</button>
@@ -105,9 +103,9 @@
                         <button type="submit" class="offer-btn offer-btn--decline">✕ Decline</button>
                       </form>
                     </div>
-                  {% elif offer.obj and offer.obj.status == 'accepted' %}
+                  {% elif offer.obj and offer.obj.acceptanceStatus == 'accepted' %}
                     <div class="offer-resolved offer-resolved--accepted">✓ Offer accepted</div>
-                  {% elif offer.obj and offer.obj.status == 'declined' %}
+                  {% elif offer.obj and offer.obj.acceptanceStatus == 'declined' %}
                     <div class="offer-resolved offer-resolved--declined">✕ Offer declined</div>
                   {% endif %}
                 </div>
@@ -164,7 +162,7 @@
           </label>
           <label class="control-label">
             Note <span class="optional-tag">optional</span>
-            <input type="text" name="message" placeholder="Why this price?">
+
           </label>
           <button type="submit" class="offer-submit-btn">Send Offer</button>
         </form>
