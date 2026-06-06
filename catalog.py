@@ -41,7 +41,7 @@ class Listing:
 
     @property
     def price_label(self) -> str:
-        return f"S${self.price:,.2f}"
+        return f"RM{self.price:,.2f}"
 
 
 class ListingFactory:

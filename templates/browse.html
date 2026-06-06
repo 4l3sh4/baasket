@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<!-- Category header bar -->
+<section class="browse-header card-surface reveal" data-reveal>
+  <div class="browse-header-inner">
+    <div class="browse-title-row">
+      <a href="{{ url_for('index') }}" class="back-btn">← Back</a>
+      <div class="browse-cat-icon">{{ category_icon }}</div>
+      <div>
+        <p class="eyebrow">Browse</p>
+        <h1>{{ category }}</h1>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Filter bar -->
+<section class="browse-filter-bar card-surface reveal" data-reveal>
+  <form method="get" action="{{ url_for('browse_category', category=category) }}" id="filter-form">
+
+    <!-- Subcategory chips -->
+    <div class="filter-group">
+      <span class="filter-label">Category</span>
+      <div class="chip-scroll">
+        <label class="chip-option {% if not selected_sub %}chip-active{% endif %}">
+          <input type="radio" name="sub" value="" {% if not selected_sub %}checked{% endif %} onchange="this.form.submit()">
+          All
+        </label>
+        {% for sub in subcategories %}
+          <label class="chip-option {% if selected_sub == sub %}chip-active{% endif %}">
+            <input type="radio" name="sub" value="{{ sub }}" {% if selected_sub == sub %}checked{% endif %} onchange="this.form.submit()">
+            {{ sub }}
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="filter-divider"></div>
+
+    <!-- Sort -->
+    <div class="filter-group filter-group-inline">
+      <span class="filter-label">Sort by</span>
+      <div class="select-wrap filter-select-wrap">
+        <select name="sort" onchange="this.form.submit()">
+          <option value="best_match" {% if sort == 'best_match' %}selected{% endif %}>Best Match</option>
+          <option value="recent"     {% if sort == 'recent'     %}selected{% endif %}>Recent</option>
+          <option value="price_high" {% if sort == 'price_high' %}selected{% endif %}>Price — High to Low</option>
+          <option value="price_low"  {% if sort == 'price_low'  %}selected{% endif %}>Price — Low to High</option>
+        </select>
+        <span class="select-arrow">▾</span>
+      </div>
+    </div>
+
+    <div class="filter-divider"></div>
+
+    <!-- Condition -->
+    <div class="filter-group">
+      <span class="filter-label">Condition</span>
+      <div class="chip-scroll">
+        <label class="chip-option {% if not selected_condition %}chip-active{% endif %}">
+          <input type="radio" name="condition" value="" {% if not selected_condition %}checked{% endif %} onchange="this.form.submit()">
+          Any
+        </label>
+        {% set cond_labels = {
+            "Brand New":  "Brand New",
+            "Like New":   "Like New",
+            "Lightly Us": "Lightly Used",
+            "Well Used":  "Well Used",
+            "Heavily Us": "Heavily Used",
+            "For Parts":  "For Parts"
+          } %}
+        {% for cond in conditions %}
+          <label class="chip-option {% if selected_condition == cond %}chip-active{% endif %}">
+            <input type="radio" name="condition" value="{{ cond }}" {% if selected_condition == cond %}checked{% endif %} onchange="this.form.submit()">
+            {{ cond_labels.get(cond, cond) }}
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="filter-divider"></div>
+
+    <!-- Price range -->
+    <div class="filter-group filter-group-inline">
+      <span class="filter-label">Price (RM)</span>
+      <div class="price-range-wrap">
+        <span class="price-prefix">RM</span>
+        <input type="number" name="price_min" min="0" step="1" placeholder="Min"
+               value="{{ price_min or '' }}" class="price-range-input">
+        <span class="price-sep">–</span>
+        <span class="price-prefix">RM</span>
+        <input type="number" name="price_max" min="0" step="1" placeholder="Max"
+               value="{{ price_max or '' }}" class="price-range-input">
+        <button type="submit" class="ghost-button price-apply-btn">Apply</button>
+      </div>
+    </div>
+
+  </form>
+</section>
+
+<!-- Results -->
+<section class="section-block">
+  <div class="section-heading">
+    <div>
+      <h2>{{ listings|length }} listing{% if listings|length != 1 %}s{% endif %} found</h2>
+      <p>{{ category }}{% if selected_sub %} › {{ selected_sub }}{% endif %}</p>
+    </div>
+  </div>
+
+  <div class="listing-grid compact-grid">
+    {% for listing in listings %}
+      <article class="product-card reveal" data-reveal>
+        <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="product-image-wrap">
+          <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
+          <span class="badge">{{ listing.badge }}</span>
+        </a>
+        <div class="product-copy">
+          <p class="product-category">{{ listing.subcategory or listing.category }}</p>
+          <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
+          <p class="product-meta">{{ listing.condition }} · {{ listing.location }}</p>
+          <div class="price-row">
+            <strong>{{ listing.price|money }}</strong>
+          </div>
+        </div>
+      </article>
+    {% else %}
+      <div class="empty-state wide">No listings found for these filters. Try adjusting the options above.</div>
+    {% endfor %}
+  </div>
+</section>
+
+{% endblock %}

@@ -81,7 +81,7 @@ class ListingModel(db.Model):
 
     @property
     def price_label(self) -> str:
-        return f"S${float(self.price):,.2f}"
+        return f"RM{float(self.price):,.2f}"
 
     @property
     def seller_name(self) -> str:
@@ -116,7 +116,7 @@ class Offer(db.Model):
 
     @property
     def amount_label(self) -> str:
-        return f"S${Decimal(self.amount):,.2f}"
+        return f"RM{Decimal(self.amount):,.2f}"
 
 
 class OrderModel(db.Model):
@@ -135,15 +135,15 @@ class OrderModel(db.Model):
 
     @property
     def subtotal_label(self) -> str:
-        return f"S${Decimal(self.subtotal):,.2f}"
+        return f"RM{Decimal(self.subtotal):,.2f}"
 
     @property
     def fee_label(self) -> str:
-        return f"S${Decimal(self.fee):,.2f}"
+        return f"RM{Decimal(self.fee):,.2f}"
 
     @property
     def total_label(self) -> str:
-        return f"S${Decimal(self.total):,.2f}"
+        return f"RM{Decimal(self.total):,.2f}"
 
 
 class OrderItemModel(db.Model):
@@ -157,11 +157,11 @@ class OrderItemModel(db.Model):
 
     @property
     def unit_price_label(self) -> str:
-        return f"S${Decimal(self.unit_price):,.2f}"
+        return f"RM{Decimal(self.unit_price):,.2f}"
 
     @property
     def line_total_label(self) -> str:
-        return f"S${Decimal(self.line_total):,.2f}"
+        return f"RM{Decimal(self.line_total):,.2f}"
 
 
 @login_manager.user_loader
