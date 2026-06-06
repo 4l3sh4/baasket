@@ -1627,7 +1627,7 @@ h3 {
   /* already styled above — just inherit */
 }
 
-/* Two-column layout for Condition + Listing type side by side */
+/* Two-column layout for side-by-side form fields */
 .form-two-col {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1745,7 +1745,7 @@ h3 {
   cursor: pointer;
 }
 /* ============================================================
-   TOGGLE SWITCHES (Buyable / Reserved)
+   TOGGLE SWITCHES (Buyable)
    ============================================================ */
 
 .toggle-label {
@@ -1813,8 +1813,4 @@ h3 {
 
 .toggle-input:checked + .toggle-slider::after {
   transform: translateX(22px);
-}
-
-#reserved-toggle:checked + .toggle-slider {
-  background: linear-gradient(135deg, #1f6f78, #27929c);
 }

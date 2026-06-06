@@ -67,10 +67,8 @@ class ListingModel(db.Model):
     buyable  = db.Column(db.Boolean, nullable=False, default=True)            # BUYABLE  bool
 
     # ── Internal / legacy fields ──────────────────────────────────────────────
-    kind           = db.Column(db.String(20),  nullable=False, default="standard")
     image_path     = db.Column(db.String(255), nullable=False, default="")
     seed_image_data = db.Column(db.Text,       nullable=False, default="")
-    tags_csv       = db.Column(db.Text,        nullable=False, default="")
     location       = db.Column(db.String(80),  nullable=False, default="")
     quantity       = db.Column(db.Integer,     nullable=False, default=1)
     sku            = db.Column(db.String(64),  nullable=True,  default="")
@@ -80,18 +78,6 @@ class ListingModel(db.Model):
     created_at = db.synonym("listed_date")
 
     offers = db.relationship("Offer", backref="listing", lazy=True, cascade="all, delete-orphan")
-
-    @property
-    def tags(self) -> tuple[str, ...]:
-        return tuple(tag for tag in self.tags_csv.split(",") if tag)
-
-    @property
-    def badge(self) -> str:
-        return {
-            "featured": "Featured",
-            "fresh": "Just In",
-            "limited": "Limited Stock",
-        }.get(self.kind, "Top Pick")
 
     @property
     def price_label(self) -> str:

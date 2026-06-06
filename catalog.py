@@ -23,8 +23,6 @@ class Listing:
     buyable: bool                    # BUYABLE — bool
     image_data: str
     buyer_id: str = ""               # BUYERID — FK → USER(USERID), nullable
-    kind: str = "standard"
-    tags: tuple[str, ...] = ()
 
     # Legacy aliases kept so existing templates/routes that reference
     # .category, .location, .seller still work without changes.
@@ -42,39 +40,13 @@ class Listing:
         return self.seller_id
 
     @property
-    def badge(self) -> str:
-        return {"featured": "Featured", "fresh": "Just In", "limited": "Limited Stock"}.get(self.kind, "Top Pick")
-
-    @property
     def price_label(self) -> str:
         return f"S${self.price:,.2f}"
 
 
-@dataclass(slots=True)
-class FeaturedListing(Listing):
-    kind: str = "featured"
-
-
-@dataclass(slots=True)
-class FreshListing(Listing):
-    kind: str = "fresh"
-
-
-@dataclass(slots=True)
-class LimitedListing(Listing):
-    kind: str = "limited"
-
-
 class ListingFactory:
     def create(self, payload: dict[str, object]) -> Listing:
-        kind = str(payload.get("kind", "standard")).lower()
-        listing_class = {
-            "featured": FeaturedListing,
-            "fresh": FreshListing,
-            "limited": LimitedListing,
-        }.get(kind, Listing)
-
-        return listing_class(
+        return Listing(
             id=str(payload["id"]),
             seller_id=str(payload.get("seller_id", payload.get("seller", ""))),
             category_id=str(payload.get("category_id", payload.get("category", ""))),
@@ -89,8 +61,6 @@ class ListingFactory:
             buyable=bool(payload.get("buyable", True)),
             image_data=str(payload.get("image_data", "")),
             buyer_id=str(payload.get("buyer_id", "")),
-            kind=kind,
-            tags=tuple(str(tag) for tag in payload.get("tags", ())),
         )
 
 
@@ -139,8 +109,7 @@ class CatalogRepository:
         return tuple(self._sort_results(matches)[:limit])
 
     def featured(self, limit: int = 4) -> tuple[Listing, ...]:
-        featured_listings = [listing for listing in self._listings if listing.kind == "featured"]
-        return tuple(self._sort_results(featured_listings)[:limit])
+        return tuple(self._sort_results(list(self._listings))[:limit])
 
     def _matches(self, listing: Listing, search: str, category: str) -> bool:
         if category and listing.category_id.casefold() != category:
@@ -149,14 +118,12 @@ class CatalogRepository:
             return True
         haystack = " ".join(
             [listing.title, listing.category_id, listing.subcategory_id,
-             listing.condition, listing.seller_id, listing.description,
-             " ".join(listing.tags)]
+             listing.condition, listing.seller_id, listing.description]
         ).casefold()
         return search in haystack
 
     def _sort_results(self, listings: list[Listing]) -> list[Listing]:
-        priority = {"featured": 0, "fresh": 1, "limited": 2, "standard": 3}
-        return sorted(listings, key=lambda item: (priority.get(item.kind, 9), item.price, item.title))
+        return sorted(listings, key=lambda item: (item.price, item.title))
 
 
 def _build_art(title: str, accent_a: str, accent_b: str) -> str:
@@ -188,7 +155,6 @@ def build_seeded_catalog(factory: ListingFactory) -> CatalogRepository:
             "price": "189.00", "condition": "Like new", "listed_date": "2025-01-10 09:00:00",
             "description": "Manual film camera with a clean lens, extra batteries, and a leather strap.",
             "likes": 14, "reserved": False, "buyable": True,
-            "kind": "featured", "tags": ("camera", "vintage", "photo"),
             "image_data": _build_art("Retro Film Camera", "#ff7a59", "#ffb347"),
         },
         {
@@ -197,7 +163,6 @@ def build_seeded_catalog(factory: ListingFactory) -> CatalogRepository:
             "price": "48.50", "condition": "Good", "listed_date": "2025-01-11 10:30:00",
             "description": "Warm LED lamp with adjustable arm and matte white finish.",
             "likes": 7, "reserved": False, "buyable": True,
-            "kind": "fresh", "tags": ("home", "desk", "light"),
             "image_data": _build_art("Minimal Desk Lamp", "#1f6f78", "#72c9c4"),
         },
         {
@@ -206,7 +171,6 @@ def build_seeded_catalog(factory: ListingFactory) -> CatalogRepository:
             "price": "72.00", "condition": "New", "listed_date": "2025-01-12 11:00:00",
             "description": "Relaxed fit overshirt that layers well over tees and hoodies.",
             "likes": 22, "reserved": False, "buyable": True,
-            "kind": "featured", "tags": ("fashion", "jacket", "menswear"),
             "image_data": _build_art("Streetwear Overshirt", "#493657", "#8e5cff"),
         },
         {
@@ -215,7 +179,6 @@ def build_seeded_catalog(factory: ListingFactory) -> CatalogRepository:
             "price": "128.90", "condition": "Excellent", "listed_date": "2025-01-13 14:00:00",
             "description": "Hot-swappable keyboard with tactile switches and custom keycaps.",
             "likes": 31, "reserved": False, "buyable": True,
-            "kind": "limited", "tags": ("keyboard", "pc", "gaming"),
             "image_data": _build_art("Mechanical Keyboard", "#23395d", "#4cc9f0"),
         },
         {
@@ -224,7 +187,6 @@ def build_seeded_catalog(factory: ListingFactory) -> CatalogRepository:
             "price": "399.00", "condition": "Good", "listed_date": "2025-01-14 15:30:00",
             "description": "Foldable scooter with a bright display and new brake pads.",
             "likes": 9, "reserved": True, "buyable": False,
-            "kind": "featured", "tags": ("travel", "ride", "urban"),
             "image_data": _build_art("Electric Scooter", "#aa4465", "#f48c06"),
         },
         {
@@ -233,7 +195,6 @@ def build_seeded_catalog(factory: ListingFactory) -> CatalogRepository:
             "price": "215.00", "condition": "Very good", "listed_date": "2025-01-15 09:45:00",
             "description": "Classic turntable with stereo speakers and a dust cover.",
             "likes": 18, "reserved": False, "buyable": True,
-            "kind": "fresh", "tags": ("music", "vinyl", "retro"),
             "image_data": _build_art("Vinyl Record Player", "#4f6d7a", "#89b0ae"),
         },
         {
@@ -242,7 +203,6 @@ def build_seeded_catalog(factory: ListingFactory) -> CatalogRepository:
             "price": "58.00", "condition": "Good", "listed_date": "2025-01-16 08:00:00",
             "description": "Lightweight pack with water resistance and padded straps.",
             "likes": 5, "reserved": False, "buyable": True,
-            "kind": "standard", "tags": ("bag", "hiking", "camp"),
             "image_data": _build_art("Trail Backpack", "#2d6a4f", "#95d5b2"),
         },
         {
@@ -251,7 +211,6 @@ def build_seeded_catalog(factory: ListingFactory) -> CatalogRepository:
             "price": "165.75", "condition": "Like new", "listed_date": "2025-01-17 16:00:00",
             "description": "Fitness-ready smartwatch with GPS, sleep tracking, and fast charging.",
             "likes": 27, "reserved": False, "buyable": True,
-            "kind": "limited", "tags": ("watch", "health", "fitness"),
             "image_data": _build_art("Smart Watch Series", "#1d3557", "#457b9d"),
         },
     ]

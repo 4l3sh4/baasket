@@ -8,12 +8,12 @@ from uuid import uuid4
 
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required, login_user, logout_user
-from sqlalchemy import case, or_, text
+from sqlalchemy import or_, text
 from werkzeug.utils import secure_filename
 
 from catalog import ListingFactory, _build_art, build_seeded_catalog
 from extensions import db, login_manager
-from models import Item, Offer, OrderItemModel, OrderModel, User, serialize_tags, ChatSession, Message
+from models import Item, Offer, OrderItemModel, OrderModel, User, ChatSession, Message
 from offers import OfferBoard
 from payment import build_payment_gateway
 
@@ -223,15 +223,6 @@ def _create_cart_lines() -> tuple[list[dict[str, object]], Decimal]:
 	return lines, subtotal
 
 
-def _sort_kind_expression():
-	return case(
-		(Item.kind == "featured", 0),
-		(Item.kind == "fresh", 1),
-		(Item.kind == "limited", 2),
-		else_=3,
-	)
-
-
 def _search_listings(search: str = "", category: str = "") -> list[Item]:
 	query = Item.query
 	if category:
@@ -245,15 +236,14 @@ def _search_listings(search: str = "", category: str = "") -> list[Item]:
 				Item.condition.ilike(pattern),
 				Item.location.ilike(pattern),
 				Item.description.ilike(pattern),
-				Item.tags_csv.ilike(pattern),
 			)
 		)
-	return query.order_by(_sort_kind_expression(), Item.created_at.desc()).all()
+	return query.order_by(Item.created_at.desc()).all()
 
 
 def _featured_listings(limit: int = 4) -> list[Item]:
 	return (
-		Item.query.order_by(_sort_kind_expression(), Item.created_at.desc())
+		Item.query.order_by(Item.created_at.desc())
 		.limit(limit)
 		.all()
 	)
@@ -262,14 +252,14 @@ def _featured_listings(limit: int = 4) -> list[Item]:
 def _related_listings(listing: Item, limit: int = 3) -> list[Item]:
 	query = (
 		Item.query.filter(Item.id != listing.id, Item.category == listing.category)
-		.order_by(_sort_kind_expression(), Item.created_at.desc())
+		.order_by(Item.created_at.desc())
 		.limit(limit)
 	)
 	results = query.all()
 	if len(results) < limit:
 		fallback = (
 			Item.query.filter(Item.id != listing.id)
-			.order_by(_sort_kind_expression(), Item.created_at.desc())
+			.order_by(Item.created_at.desc())
 			.all()
 		)
 		for candidate in fallback:
@@ -338,10 +328,8 @@ def _seed_database() -> None:
 					condition=seed_listing.condition,
 					location=seed_listing.location,
 					description=seed_listing.description,
-					kind=seed_listing.kind,
 					image_path="",
 					seed_image_data=seed_listing.image_data,
-					tags_csv=serialize_tags(seed_listing.tags),
 				)
 			)
 	db.session.commit()
@@ -523,9 +511,6 @@ def create_app() -> Flask:
 			condition = condition[:10]  # enforce VARCHAR(10)
 			location = request.form.get("location", "").strip() or "Local pickup"
 			description = request.form.get("description", "").strip()[:1000]
-			kind = request.form.get("kind", "standard").strip() or "standard"
-			tags = [tag.strip() for tag in request.form.get("tags", "").split(",") if tag.strip()]
-			reserved = request.form.get("reserved") == "1"
 			buyable  = request.form.get("buyable",  "1") == "1"
 			image_path = _save_upload(request.files.get("image"), LISTING_UPLOAD_DIR)
 			seed_image_data = "" if image_path else _build_art(title[:24] or category[:24] or "Listing", "#1f6f78", "#e26d5c")
@@ -557,12 +542,9 @@ def create_app() -> Flask:
 				condition=condition,
 				location=location,
 				description=description,
-				kind=kind,
 				image_path=image_path or "",
 				seed_image_data=seed_image_data,
-				tags_csv=serialize_tags(tags),
 				likes=0,
-				reserved=reserved,
 				buyable=buyable,
 			)
 			db.session.add(listing)
@@ -960,10 +942,6 @@ def create_app() -> Flask:
 			listing.condition = request.form.get("condition", "").strip() or listing.condition
 			listing.location = request.form.get("location", "").strip() or listing.location
 			listing.description = request.form.get("description", "").strip() or listing.description
-			listing.kind = request.form.get("kind", listing.kind).strip() or listing.kind
-			tags = [tag.strip() for tag in request.form.get("tags", "").split(",") if tag.strip()]
-			if tags:
-				listing.tags_csv = serialize_tags(tags)
 
 			price_text = request.form.get("price", "").strip()
 			if price_text:
