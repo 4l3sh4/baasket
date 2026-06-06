@@ -17,7 +17,7 @@
 
       <label>
         Title
-        <input type="text" name="title" placeholder="e.g. Sony WH-1000XM5 Headphones" required>
+        <input type="text" name="title" placeholder="e.g. Sony WH-1000XM5 Headphones" maxlength="100" required>
       </label>
 
       <label>
@@ -91,6 +91,30 @@
         <input type="text" name="tags" placeholder="e.g. wireless, noise-cancelling, sony">
       </label>
 
+      <div class="form-two-col">
+        <label class="toggle-label">
+          <div class="toggle-label-text">
+            <span>Buyable</span>
+            <span class="field-hint">Can be purchased via delivery or mailing</span>
+          </div>
+          <div class="toggle-wrap">
+            <input type="checkbox" name="buyable" value="1" id="buyable-toggle" checked class="toggle-input">
+            <label for="buyable-toggle" class="toggle-slider"></label>
+          </div>
+        </label>
+
+        <label class="toggle-label">
+          <div class="toggle-label-text">
+            <span>Reserved</span>
+            <span class="field-hint">Temporarily hold for a specific buyer</span>
+          </div>
+          <div class="toggle-wrap">
+            <input type="checkbox" name="reserved" value="1" id="reserved-toggle" class="toggle-input">
+            <label for="reserved-toggle" class="toggle-slider"></label>
+          </div>
+        </label>
+      </div>
+
       <label>
         Listing image <span class="field-hint">optional</span>
         <div class="file-drop-zone" id="file-drop-zone">
@@ -104,8 +128,8 @@
       </label>
 
       <label>
-        Description
-        <textarea name="description" rows="6" placeholder="Describe your item honestly — condition, accessories included, reason for selling…" required></textarea>
+        Description <span class="field-hint">up to 1000 characters</span>
+        <textarea name="description" rows="6" maxlength="1000" placeholder="Describe your item honestly — condition, accessories included, reason for selling…" required></textarea>
       </label>
 
       <button type="submit" class="primary-button publish-btn">Publish listing →</button>

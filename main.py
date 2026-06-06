@@ -424,6 +424,12 @@ def create_app() -> Flask:
 					("sku", "TEXT"),
 					("is_active", "INTEGER"),
 					("subcategory", "TEXT"),
+					("buyer_id", "INTEGER"),
+					("likes", "INTEGER DEFAULT 0"),
+					("reserved", "INTEGER DEFAULT 0"),
+					("buyable", "INTEGER DEFAULT 1"),
+					("listed_date", "TEXT"),
+					("location", "TEXT"),
 				],
 				"offer": [
 					("buyer_id", "INTEGER"),
@@ -509,15 +515,18 @@ def create_app() -> Flask:
 	@login_required
 	def sell() -> str:
 		if request.method == "POST":
-			title = request.form.get("title", "").strip()
+			title = request.form.get("title", "").strip()[:100]
 			category = request.form.get("category", "").strip()
 			subcategory = request.form.get("subcategory", "").strip()
 			price_text = request.form.get("price", "").strip()
 			condition = request.form.get("condition", "").strip() or "Good"
+			condition = condition[:10]  # enforce VARCHAR(10)
 			location = request.form.get("location", "").strip() or "Local pickup"
-			description = request.form.get("description", "").strip()
+			description = request.form.get("description", "").strip()[:1000]
 			kind = request.form.get("kind", "standard").strip() or "standard"
 			tags = [tag.strip() for tag in request.form.get("tags", "").split(",") if tag.strip()]
+			reserved = request.form.get("reserved") == "1"
+			buyable  = request.form.get("buyable",  "1") == "1"
 			image_path = _save_upload(request.files.get("image"), LISTING_UPLOAD_DIR)
 			seed_image_data = "" if image_path else _build_art(title[:24] or category[:24] or "Listing", "#1f6f78", "#e26d5c")
 
@@ -534,7 +543,7 @@ def create_app() -> Flask:
 				subcategory = ""
 
 			try:
-				price = Decimal(price_text)
+				price = float(price_text)
 			except Exception:
 				flash("Enter a valid asking price.", "warning")
 				return redirect(url_for("sell"))
@@ -543,6 +552,7 @@ def create_app() -> Flask:
 				seller_id=current_user.id,
 				title=title,
 				category=category,
+				subcategory=subcategory,
 				price=price,
 				condition=condition,
 				location=location,
@@ -551,9 +561,10 @@ def create_app() -> Flask:
 				image_path=image_path or "",
 				seed_image_data=seed_image_data,
 				tags_csv=serialize_tags(tags),
+				likes=0,
+				reserved=reserved,
+				buyable=buyable,
 			)
-			if hasattr(listing, "subcategory"):
-				listing.subcategory = subcategory
 			db.session.add(listing)
 			db.session.commit()
 			flash("Your listing is now live on Baasket.", "success")

@@ -1744,3 +1744,77 @@ h3 {
   padding-right: 36px;
   cursor: pointer;
 }
+/* ============================================================
+   TOGGLE SWITCHES (Buyable / Reserved)
+   ============================================================ */
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(21, 32, 43, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.toggle-label-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.toggle-label-text > span:first-child {
+  font-size: 0.95rem;
+}
+
+.toggle-wrap {
+  flex: none;
+  position: relative;
+}
+
+.toggle-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  display: block;
+  width: 48px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(21, 32, 43, 0.18);
+  cursor: pointer;
+  transition: background 0.22s ease;
+  position: relative;
+}
+
+.toggle-slider::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  transition: transform 0.22s ease;
+}
+
+.toggle-input:checked + .toggle-slider {
+  background: linear-gradient(135deg, var(--accent), #f07e4e);
+}
+
+.toggle-input:checked + .toggle-slider::after {
+  transform: translateX(22px);
+}
+
+#reserved-toggle:checked + .toggle-slider {
+  background: linear-gradient(135deg, #1f6f78, #27929c);
+}

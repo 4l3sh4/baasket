@@ -43,23 +43,41 @@ class User(db.Model, UserMixin):
 
 
 class ListingModel(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    seller_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
-    title = db.Column(db.String(140), nullable=False, index=True)
-    category = db.Column(db.String(80), nullable=False, index=True)
-    subcategory = db.Column(db.String(120), nullable=False, default="")
-    price = db.Column(db.Numeric(10, 2), nullable=False)
-    condition = db.Column(db.String(80), nullable=False)
-    location = db.Column(db.String(80), nullable=False)
-    description = db.Column(db.Text, nullable=False)
-    kind = db.Column(db.String(20), nullable=False, default="standard")
-    image_path = db.Column(db.String(255), nullable=False, default="")
-    seed_image_data = db.Column(db.Text, nullable=False, default="")
-    tags_csv = db.Column(db.Text, nullable=False, default="")
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
-    quantity = db.Column(db.Integer, nullable=False, default=1)
-    sku = db.Column(db.String(64), nullable=True, default="")
-    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    # ── Primary key ──────────────────────────────────────────────────────────
+    id = db.Column(db.Integer, primary_key=True)                              # ITEMID (internal int; ITEMID UUID stored separately if needed)
+
+    # ── Foreign keys ─────────────────────────────────────────────────────────
+    seller_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)   # SELLERID → USER
+    buyer_id  = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True,  index=True)   # BUYERID  → USER (null until sold)
+
+    # ── Category / subcategory (stored as strings; FK logic handled at app layer) ──
+    category    = db.Column(db.String(80),  nullable=False, index=True)       # CATEGORYID
+    subcategory = db.Column(db.String(120), nullable=False, default="")       # SUBCATEGORYID
+
+    # ── Core listing fields ───────────────────────────────────────────────────
+    title       = db.Column(db.String(100), nullable=False, index=True)       # TITLE    VARCHAR(100)
+    price       = db.Column(db.Float,       nullable=False)                   # PRICE    FLOAT
+    condition   = db.Column(db.String(10),  nullable=False)                   # CONDITION VARCHAR(10)
+    listed_date = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow, index=True)  # LISTEDDATE
+    description = db.Column(db.String(1000), nullable=False)                  # DESCRIPTION VARCHAR(1000)
+
+    # ── Status & engagement ───────────────────────────────────────────────────
+    likes    = db.Column(db.Integer, nullable=False, default=0)               # LIKES    INTEGER (≥ 0)
+    reserved = db.Column(db.Boolean, nullable=False, default=False)           # RESERVED bool
+    buyable  = db.Column(db.Boolean, nullable=False, default=True)            # BUYABLE  bool
+
+    # ── Internal / legacy fields ──────────────────────────────────────────────
+    kind           = db.Column(db.String(20),  nullable=False, default="standard")
+    image_path     = db.Column(db.String(255), nullable=False, default="")
+    seed_image_data = db.Column(db.Text,       nullable=False, default="")
+    tags_csv       = db.Column(db.Text,        nullable=False, default="")
+    location       = db.Column(db.String(80),  nullable=False, default="")
+    quantity       = db.Column(db.Integer,     nullable=False, default=1)
+    sku            = db.Column(db.String(64),  nullable=True,  default="")
+    is_active      = db.Column(db.Boolean,     nullable=False, default=True)
+
+    # Keep created_at as an alias so existing code referencing it still works
+    created_at = db.synonym("listed_date")
 
     offers = db.relationship("Offer", backref="listing", lazy=True, cascade="all, delete-orphan")
 
@@ -77,7 +95,7 @@ class ListingModel(db.Model):
 
     @property
     def price_label(self) -> str:
-        return f"S${Decimal(self.price):,.2f}"
+        return f"S${float(self.price):,.2f}"
 
     @property
     def seller_name(self) -> str:
