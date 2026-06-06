@@ -27,7 +27,7 @@ class User(db.Model, UserMixin):
     country = db.Column(db.String(80), nullable=True, default="")
     last_seen = db.Column(db.DateTime, nullable=True)
 
-    listings = db.relationship("ListingModel", backref="seller", lazy=True, cascade="all, delete-orphan")
+    listings = db.relationship("ListingModel", foreign_keys="[ListingModel.seller_id]", backref="seller", lazy=True, cascade="all, delete-orphan")
 
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password)
