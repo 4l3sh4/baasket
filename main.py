@@ -182,6 +182,46 @@ CATEGORIES_MAP: dict[str, list[str]] = {
 
 VALID_CATEGORIES: frozenset[str] = frozenset(CATEGORIES_MAP.keys())
 
+# Placeholder emoji icons for each category (shown in the carousel)
+CATEGORY_ICONS: dict[str, str] = {
+	"Computers & Tech":        "💻",
+	"Mobile Phones & Gadgets": "📱",
+	"Women's Fashion":         "👗",
+	"Men's Fashion":           "👔",
+	"Beauty & Personal Care":  "💄",
+	"Luxury":                  "👜",
+	"Video Gaming":            "🎮",
+	"Audio":                   "🎧",
+	"Photography":             "📷",
+	"Furniture & Home Living": "🛋️",
+	"TV & Home Appliances":    "📺",
+	"Babies & Kids":           "🍼",
+	"Hobbies & Toys":          "🎨",
+	"Health & Nutrition":      "💊",
+	"Sports Equipment":        "⚽",
+	"Auto Accessories":        "🚗",
+	"Pet Supplies":            "🐾",
+}
+
+# Conditions as stored in the database (condition field is VARCHAR(10), so values are truncated)
+# These match what sell.html offers, after the [:10] slice applied in the sell route.
+BROWSE_CONDITIONS: list[str] = [
+	"Brand New",   # 9  chars – unchanged
+	"Like New",    # 8  chars – unchanged
+	"Lightly Us",  # truncated from "Lightly Used"
+	"Well Used",   # 9  chars – unchanged
+	"Heavily Us",  # truncated from "Heavily Used"
+	"For Parts",   # 9  chars – unchanged
+]
+
+
+def _build_category_list() -> list[dict[str, str]]:
+	"""Return ordered list of dicts with name + icon for the carousel."""
+	return [
+		{"name": name, "icon": CATEGORY_ICONS.get(name, "🏷️")}
+		for name in CATEGORIES_MAP
+	]
+
 
 def _ensure_storage() -> None:
 	INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
@@ -203,7 +243,7 @@ def _save_upload(file_storage, folder: Path) -> str | None:
 
 def _money(value: object) -> str:
 	amount = Decimal(str(value))
-	return f"S${amount:,.2f}"
+	return f"RM{amount:,.2f}"
 
 
 def _create_cart_lines() -> tuple[list[dict[str, object]], Decimal]:
@@ -462,6 +502,7 @@ def create_app() -> Flask:
 			featured=_featured_listings(limit=4),
 			categories=list(CATEGORIES_MAP.keys()),
 			listing_count=Item.query.count(),
+			category_list=_build_category_list(),
 		)
 
 	@app.get("/listing/<int:listing_id>")
@@ -899,6 +940,7 @@ def create_app() -> Flask:
 			listings=listings,
 			sales_history=sales_history,
 			stats=stats,
+			category_list=_build_category_list(),
 		)
 
 	@app.route("/dashboard/listings/<int:listing_id>/edit", methods=["GET", "POST"])
@@ -963,6 +1005,81 @@ def create_app() -> Flask:
 		db.session.commit()
 		flash("Listing removed.", "info")
 		return redirect(url_for("dashboard"))
+
+	@app.get("/browse/<path:category>")
+	def browse_category(category: str) -> str:
+		"""Category browse page with subcategory, sort, condition, and price filters."""
+		if category not in VALID_CATEGORIES:
+			flash("That category does not exist.", "warning")
+			return redirect(url_for("index"))
+
+		subcategories = CATEGORIES_MAP.get(category, [])
+
+		# Query params
+		selected_sub       = request.args.get("sub", "").strip()
+		sort               = request.args.get("sort", "best_match").strip()
+		selected_condition = request.args.get("condition", "").strip()
+		price_min_raw      = request.args.get("price_min", "").strip()
+		price_max_raw      = request.args.get("price_max", "").strip()
+
+		# Validate sub
+		if selected_sub and selected_sub not in subcategories:
+			selected_sub = ""
+
+		# Validate condition
+		if selected_condition and selected_condition not in BROWSE_CONDITIONS:
+			selected_condition = ""
+
+		# Parse price bounds
+		try:
+			price_min = Decimal(price_min_raw) if price_min_raw else None
+		except Exception:
+			price_min = None
+		try:
+			price_max = Decimal(price_max_raw) if price_max_raw else None
+		except Exception:
+			price_max = None
+
+		# Build query
+		query = Item.query.filter(Item.category == category)
+		if selected_sub:
+			query = query.filter(Item.subcategory == selected_sub)
+		if selected_condition:
+			query = query.filter(Item.condition == selected_condition)
+		if price_min is not None:
+			query = query.filter(Item.price >= float(price_min))
+		if price_max is not None:
+			query = query.filter(Item.price <= float(price_max))
+
+		# Apply sort
+		if sort == "recent":
+			query = query.order_by(Item.created_at.desc())
+		elif sort == "price_high":
+			query = query.order_by(Item.price.desc())
+		elif sort == "price_low":
+			query = query.order_by(Item.price.asc())
+		else:
+			# best_match: most recently created first
+			query = query.order_by(Item.created_at.desc())
+
+		listings = query.all()
+
+		category_icon = CATEGORY_ICONS.get(category, "🏷️")
+
+		return render_template(
+			"browse.html",
+			title=f"{category} | Baasket",
+			category=category,
+			category_icon=category_icon,
+			subcategories=subcategories,
+			selected_sub=selected_sub,
+			sort=sort,
+			conditions=BROWSE_CONDITIONS,
+			selected_condition=selected_condition,
+			price_min=price_min_raw,
+			price_max=price_max_raw,
+			listings=listings,
+		)
 
 	return app
 

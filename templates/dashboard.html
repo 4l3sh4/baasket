@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
+<!-- ── Seller dashboard hero ─────────────────────────────────────────────── -->
 <section class="dashboard-hero card-surface reveal" data-reveal>
   <div class="dashboard-profile">
     <img src="{{ current_user.profile_image_url }}" alt="{{ current_user.username }} profile image" class="dashboard-avatar">
@@ -28,6 +29,7 @@
   </div>
 </section>
 
+<!-- ── Update profile ────────────────────────────────────────────────────── -->
 <section class="section-block">
   <article class="card-surface reveal" data-reveal>
     <div class="section-heading compact">
@@ -47,9 +49,9 @@
       <button type="submit" class="primary-button">Save profile</button>
     </form>
   </article>
-
 </section>
 
+<!-- ── Your listings ─────────────────────────────────────────────────────── -->
 <section class="section-block">
   <div class="section-heading">
     <div>
@@ -86,6 +88,7 @@
   </div>
 </section>
 
+<!-- ── Sales history ─────────────────────────────────────────────────────── -->
 <section class="section-block">
   <div class="section-heading">
     <div>

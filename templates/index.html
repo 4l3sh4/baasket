@@ -1,6 +1,30 @@
 {% extends "base.html" %}
 
 {% block content %}
+<!-- ── Category Carousel ─────────────────────────────────────────────────── -->
+<section class="cat-carousel-section card-surface reveal" data-reveal>
+  <div class="cat-carousel-header">
+    <h2 class="cat-carousel-title">Explore Baasket</h2>
+    <div class="cat-carousel-nav">
+      <button class="cat-nav-btn" id="cat-prev" aria-label="Scroll left">‹</button>
+      <button class="cat-nav-btn" id="cat-next" aria-label="Scroll right">›</button>
+    </div>
+  </div>
+
+  <div class="cat-carousel-track-wrap">
+    <div class="cat-carousel-track" id="cat-track">
+      {% for cat in category_list %}
+        <a href="{{ url_for('browse_category', category=cat.name) }}" class="cat-item">
+          <div class="cat-icon-wrap">
+            <span class="cat-icon-placeholder">{{ cat.icon }}</span>
+          </div>
+          <span class="cat-label">{{ cat.name }}</span>
+        </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
 <section class="hero reveal" data-reveal>
   <div class="hero-copy">
     <p class="eyebrow">Curated marketplace, built for quick moves</p>
@@ -156,4 +180,23 @@
     {% endfor %}
   </div>
 </section>
+
+<script>
+(function () {
+  var track = document.getElementById('cat-track');
+  var prevBtn = document.getElementById('cat-prev');
+  var nextBtn = document.getElementById('cat-next');
+  var scrollAmount = 260;
+
+  if (!track) return;
+
+  prevBtn.addEventListener('click', function () {
+    track.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+  });
+  nextBtn.addEventListener('click', function () {
+    track.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+  });
+})();
+</script>
+
 {% endblock %}
