@@ -347,6 +347,18 @@ class Payment(db.Model):
         return True
 
 
+class Notification(db.Model):
+    __tablename__ = "notification"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    message = db.Column(db.String(255), nullable=False)
+    category = db.Column(db.String(40), nullable=False, default="general")
+    is_read = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    user = db.relationship("User", foreign_keys=[user_id], backref="notifications")
+
+
 class Shipping(db.Model):
     __tablename__ = "shipping"
     shippingID = db.Column(db.String(36), primary_key=True)

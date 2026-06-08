@@ -28,6 +28,12 @@
             <span class="pill pill--teal">{{ chat_count }}</span>
           {% endif %}
         </a>
+        <a href="{{ url_for('notifications_view') }}">
+          &#128276;
+          {% if unread_count and unread_count > 0 %}
+            <span class="pill pill--red">{{ unread_count }}</span>
+          {% endif %}
+        </a>
         <a href="{{ url_for('logout') }}">Logout</a>
       {% else %}
         <a href="{{ url_for('login') }}">Login</a>

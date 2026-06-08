@@ -13,7 +13,8 @@ from werkzeug.utils import secure_filename
 
 from catalog import ListingFactory, _build_art, build_seeded_catalog
 from extensions import db, login_manager
-from models import Item, Offer, OrderItemModel, OrderModel, User, ChatSession, Message
+from models import Item, Notification, Offer, OrderItemModel, OrderModel, User, ChatSession, Message
+from notifications import build_notification_subject
 from offers import OfferBoard
 from payment import build_payment_gateway
 
@@ -388,6 +389,7 @@ def create_app() -> Flask:
 
 	payment_gateway = build_payment_gateway()
 	offer_board = OfferBoard()
+	notification_subject = build_notification_subject()
 
 	@app.template_filter("money")
 	def money_filter(value: object) -> str:
@@ -396,6 +398,7 @@ def create_app() -> Flask:
 	@app.context_processor
 	def inject_globals() -> dict[str, object]:
 		chat_count = 0
+		unread_count = 0
 		if current_user.is_authenticated:
 			chat_count = ChatSession.query.filter(
 				or_(
@@ -403,9 +406,13 @@ def create_app() -> Flask:
 					ChatSession.seller_id == current_user.id,
 				)
 			).count()
+			unread_count = Notification.query.filter_by(
+				user_id=current_user.id, is_read=False
+			).count()
 		return {
 			"cart_count": len(session.get("cart", [])),
 			"chat_count": chat_count,
+			"unread_count": unread_count,
 			"payment_methods": payment_gateway.options(),
 			"brand_logo": url_for("static", filename="assets/logo/baasket_logo.png"),
 		}
@@ -471,6 +478,10 @@ def create_app() -> Flask:
 					("order_id", "INTEGER"),
 					("gateway_reference", "TEXT"),
 					("provider", "TEXT"),
+				],
+				"notification": [
+					("category", "TEXT"),
+					("is_read", "INTEGER DEFAULT 0"),
 				],
 			}
 
@@ -660,6 +671,18 @@ def create_app() -> Flask:
 			)
 		db.session.commit()
 
+		# Notify each seller whose item was purchased
+		seller_titles: dict[int, list[str]] = {}
+		for line in lines:
+			listing = line["listing"]
+			seller_titles.setdefault(listing.seller_id, []).append(listing.title)
+		for seller_id, titles in seller_titles.items():
+			notification_subject.notify("purchase", {
+				"seller_id": seller_id,
+				"titles": titles,
+			})
+		db.session.commit()
+
 		session.pop("cart", None)
 		flash("Payment processed successfully.", "success")
 		return render_template(
@@ -837,6 +860,13 @@ def create_app() -> Flask:
 			creator_id=current_user.id,
 		)
 		db.session.add(notify)
+		listing = db.session.get(Item, offer.listing_id)
+		notification_subject.notify("offer_accepted", {
+			"buyer_id": offer.sender_id,
+			"seller_id": current_user.id,
+			"amount": offer.amount_label,
+			"listing_title": listing.title if listing else "an item",
+		})
 		db.session.commit()
 		flash("Offer accepted.", "success")
 		return redirect(url_for("chat_view", chat_id=chat_id))
@@ -860,6 +890,12 @@ def create_app() -> Flask:
 			creator_id=current_user.id,
 		)
 		db.session.add(notify)
+		listing = db.session.get(Item, offer.listing_id)
+		notification_subject.notify("offer_declined", {
+			"buyer_id": offer.sender_id,
+			"amount": offer.amount_label,
+			"listing_title": listing.title if listing else "an item",
+		})
 		db.session.commit()
 		flash("Offer declined.", "info")
 		return redirect(url_for("chat_view", chat_id=chat_id))
@@ -1079,6 +1115,24 @@ def create_app() -> Flask:
 			price_min=price_min_raw,
 			price_max=price_max_raw,
 			listings=listings,
+		)
+
+	@app.get("/notifications")
+	@login_required
+	def notifications_view() -> str:
+		notifs = (
+			Notification.query.filter_by(user_id=current_user.id)
+			.order_by(Notification.created_at.desc())
+			.all()
+		)
+		# Mark all as read
+		for n in notifs:
+			n.is_read = True
+		db.session.commit()
+		return render_template(
+			"notifications.html",
+			title="Notifications | Baasket",
+			notifications=notifs,
 		)
 
 	return app
