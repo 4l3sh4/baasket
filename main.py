@@ -968,20 +968,6 @@ def create_app() -> Flask:
 					return redirect(url_for("dashboard"))
 				current_user.username = new_username
 			current_user.bio = request.form.get("bio", "").strip()
-			current_password = request.form.get("current_password", "")
-			new_password = request.form.get("new_password", "")
-			confirm_password = request.form.get("confirm_password", "")
-			if current_password or new_password or confirm_password:
-				if not current_password or not new_password or not confirm_password:
-					flash("Fill in all password fields to change your password.", "warning")
-					return redirect(url_for("dashboard"))
-				if not current_user.check_password(current_password):
-					flash("Current password is incorrect.", "warning")
-					return redirect(url_for("dashboard"))
-				if new_password != confirm_password:
-					flash("New passwords do not match.", "warning")
-					return redirect(url_for("dashboard"))
-				current_user.set_password(new_password)
 			new_profile_image = _save_upload(request.files.get("profile_image"), PROFILE_UPLOAD_DIR)
 			if new_profile_image:
 				current_user.profile_image = new_profile_image
@@ -1007,6 +993,26 @@ def create_app() -> Flask:
 			reviews_count=reviews_count,
 			category_list=_build_category_list(),
 		)
+
+	@app.post("/dashboard/change_password")
+	@login_required
+	def change_password():
+		current_password = request.form.get("current_password", "")
+		new_password = request.form.get("new_password", "")
+		confirm_password = request.form.get("confirm_password", "")
+		if not (current_password and new_password and confirm_password):
+			flash("Fill in all password fields to change your password.", "warning")
+			return redirect(url_for("dashboard"))
+		if not current_user.check_password(current_password):
+			flash("Current password is incorrect.", "warning")
+			return redirect(url_for("dashboard"))
+		if new_password != confirm_password:
+			flash("New passwords do not match.", "warning")
+			return redirect(url_for("dashboard"))
+		current_user.set_password(new_password)
+		db.session.commit()
+		flash("Your password has been changed.", "success")
+		return redirect(url_for("dashboard"))
 
 	@app.route("/dashboard/listings/<int:listing_id>/edit", methods=["GET", "POST"])
 	@login_required

@@ -50,9 +50,17 @@
         Bio
         <textarea name="bio" rows="4">{{ current_user.bio }}</textarea>
       </label>
-      <button type="button" id="password-toggle" class="secondary-button">Change password</button>
+      <label>
+        New profile image
+        <input type="file" name="profile_image" accept="image/*">
+      </label>
+      <button type="submit" class="primary-button">Save profile</button>
+    </form>
+
+    <form method="post" action="{{ url_for('change_password') }}" class="stack-form">
+      <button type="button" id="password-toggle" class="secondary-button" style="margin-top:12px;">Change password</button>
       <div id="password-panel" style="display:none; margin-top: 12px;">
-        <p class="muted-text">Leave these fields blank if you do not want to change your password.</p>
+        <p class="muted-text">Fill these fields to change your password.</p>
         <label>
           Current password
           <input type="password" name="current_password" autocomplete="current-password">
@@ -65,13 +73,10 @@
           Confirm new password
           <input type="password" name="confirm_password" autocomplete="new-password">
         </label>
+        <button type="submit" class="primary-button">Change password</button>
       </div>
-      <label>
-        New profile image
-        <input type="file" name="profile_image" accept="image/*">
-      </label>
-      <button type="submit" class="primary-button">Save profile</button>
     </form>
+
     <script>
       document.addEventListener("DOMContentLoaded", () => {
         const toggle = document.getElementById("password-toggle");
