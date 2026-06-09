@@ -69,6 +69,9 @@
       <article class="thumb-card reveal" data-reveal>
         <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="thumb-image-wrap">
           <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
+          <span class="badge {% if listing.buyer_id %}badge-sold{% else %}badge-available{% endif %}">
+            {% if listing.buyer_id %}Sold{% else %}Available{% endif %}
+          </span>
         </a>
         <div class="thumb-meta">
           <h3 class="thumb-title"><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>

@@ -659,6 +659,8 @@ def create_app() -> Flask:
 		db.session.flush()
 		for line in lines:
 			listing = line["listing"]
+			listing.buyer_id = current_user.id
+			listing.buyable = False
 			db.session.add(
 				OrderItemModel(
 					order_id=order.id,
