@@ -50,12 +50,40 @@
         Bio
         <textarea name="bio" rows="4">{{ current_user.bio }}</textarea>
       </label>
+      <button type="button" id="password-toggle" class="secondary-button">Change password</button>
+      <div id="password-panel" style="display:none; margin-top: 12px;">
+        <p class="muted-text">Leave these fields blank if you do not want to change your password.</p>
+        <label>
+          Current password
+          <input type="password" name="current_password" autocomplete="current-password">
+        </label>
+        <label>
+          New password
+          <input type="password" name="new_password" autocomplete="new-password">
+        </label>
+        <label>
+          Confirm new password
+          <input type="password" name="confirm_password" autocomplete="new-password">
+        </label>
+      </div>
       <label>
         New profile image
         <input type="file" name="profile_image" accept="image/*">
       </label>
       <button type="submit" class="primary-button">Save profile</button>
     </form>
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const toggle = document.getElementById("password-toggle");
+        const panel = document.getElementById("password-panel");
+        if (!toggle || !panel) return;
+        toggle.addEventListener("click", () => {
+          const isHidden = panel.style.display === "none";
+          panel.style.display = isHidden ? "block" : "none";
+          toggle.textContent = isHidden ? "Hide password fields" : "Change password";
+        });
+      });
+    </script>
   </article>
 </section>
 
