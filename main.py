@@ -13,7 +13,7 @@ from werkzeug.utils import secure_filename
 
 from catalog import ListingFactory, _build_art, build_seeded_catalog
 from extensions import db, login_manager
-from models import Item, Notification, Offer, OrderItemModel, OrderModel, User, ChatSession, Message
+from models import Item, Notification, Offer, OrderItemModel, OrderModel, User, ChatSession, Message, Review
 from notifications import build_notification_subject
 from offers import OfferBoard
 from payment import build_payment_gateway
@@ -970,12 +970,15 @@ def create_app() -> Flask:
 		)
 		sales_history = _sales_history_for_user(current_user.id)
 		stats = _listing_stats_for_user(current_user.id)
+		# Total reviews received by the current user
+		reviews_count = Review.query.filter_by(created_by=current_user.id).count()
 		return render_template(
 			"dashboard.html",
 			title="Seller Dashboard | Baasket",
 			listings=listings,
 			sales_history=sales_history,
 			stats=stats,
+			reviews_count=reviews_count,
 			category_list=_build_category_list(),
 		)
 
