@@ -43,6 +43,10 @@
 
     <form method="post" class="stack-form" enctype="multipart/form-data">
       <label>
+        Username
+        <input type="text" name="username" value="{{ current_user.username }}" required>
+      </label>
+      <label>
         Bio
         <textarea name="bio" rows="4">{{ current_user.bio }}</textarea>
       </label>

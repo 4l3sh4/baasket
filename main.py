@@ -957,6 +957,16 @@ def create_app() -> Flask:
 	@login_required
 	def dashboard() -> str:
 		if request.method == "POST":
+			new_username = request.form.get("username", "").strip()
+			if not new_username:
+				flash("Username cannot be empty.", "warning")
+				return redirect(url_for("dashboard"))
+			if new_username != current_user.username:
+				existing_user = User.query.filter(User.username == new_username, User.id != current_user.id).first()
+				if existing_user is not None:
+					flash("That username is already taken.", "warning")
+					return redirect(url_for("dashboard"))
+				current_user.username = new_username
 			current_user.bio = request.form.get("bio", "").strip()
 			new_profile_image = _save_upload(request.files.get("profile_image"), PROFILE_UPLOAD_DIR)
 			if new_profile_image:
