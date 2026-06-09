@@ -64,26 +64,15 @@
     </div>
   </div>
 
-  <div class="listing-grid compact-grid">
+  <div class="listing-grid thumbnail-grid">
     {% for listing in listings %}
-      <article class="product-card reveal" data-reveal>
-        <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="product-image-wrap">
+      <article class="thumb-card reveal" data-reveal>
+        <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="thumb-image-wrap">
           <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
-          <span class="badge">{{ listing.badge }}</span>
         </a>
-        <div class="product-copy">
-          <p class="product-category">{{ listing.category }}</p>
-          <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
-          <p class="product-meta">{{ listing.condition }} · {{ listing.location }}</p>
-          <div class="price-row">
-            <strong>{{ listing.price|money }}</strong>
-            <div class="dashboard-actions">
-              <span class="dashboard-count">{{ listing.offer_count }} offers</span>
-              <form method="post" action="{{ url_for('delete_listing', listing_id=listing.id) }}">
-                <button type="submit" class="ghost-button">Delete</button>
-              </form>
-            </div>
-          </div>
+        <div class="thumb-meta">
+          <h3 class="thumb-title"><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
+          <div class="thumb-price">{{ listing.price|money }}</div>
         </div>
       </article>
     {% else %}
