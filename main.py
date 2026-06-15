@@ -13,7 +13,7 @@ from werkzeug.utils import secure_filename
 
 from catalog import ListingFactory, _build_art, build_seeded_catalog
 from extensions import db, login_manager
-from models import Item, Notification, Offer, OrderItemModel, OrderModel, User, ChatSession, Message
+from models import Item, Notification, Offer, OrderItemModel, OrderModel, User, ChatSession, Message, Review
 from notifications import build_notification_subject
 from offers import OfferBoard
 from payment import build_payment_gateway
@@ -659,6 +659,8 @@ def create_app() -> Flask:
 		db.session.flush()
 		for line in lines:
 			listing = line["listing"]
+			listing.buyer_id = current_user.id
+			listing.buyable = False
 			db.session.add(
 				OrderItemModel(
 					order_id=order.id,
@@ -955,6 +957,16 @@ def create_app() -> Flask:
 	@login_required
 	def dashboard() -> str:
 		if request.method == "POST":
+			new_username = request.form.get("username", "").strip()
+			if not new_username:
+				flash("Username cannot be empty.", "warning")
+				return redirect(url_for("dashboard"))
+			if new_username != current_user.username:
+				existing_user = User.query.filter(User.username == new_username, User.id != current_user.id).first()
+				if existing_user is not None:
+					flash("That username is already taken.", "warning")
+					return redirect(url_for("dashboard"))
+				current_user.username = new_username
 			current_user.bio = request.form.get("bio", "").strip()
 			new_profile_image = _save_upload(request.files.get("profile_image"), PROFILE_UPLOAD_DIR)
 			if new_profile_image:
@@ -970,14 +982,37 @@ def create_app() -> Flask:
 		)
 		sales_history = _sales_history_for_user(current_user.id)
 		stats = _listing_stats_for_user(current_user.id)
+		# Total reviews received by the current user
+		reviews_count = Review.query.filter_by(created_by=current_user.id).count()
 		return render_template(
 			"dashboard.html",
 			title="Seller Dashboard | Baasket",
 			listings=listings,
 			sales_history=sales_history,
 			stats=stats,
+			reviews_count=reviews_count,
 			category_list=_build_category_list(),
 		)
+
+	@app.post("/dashboard/change_password")
+	@login_required
+	def change_password():
+		current_password = request.form.get("current_password", "")
+		new_password = request.form.get("new_password", "")
+		confirm_password = request.form.get("confirm_password", "")
+		if not (current_password and new_password and confirm_password):
+			flash("Fill in all password fields to change your password.", "warning")
+			return redirect(url_for("dashboard"))
+		if not current_user.check_password(current_password):
+			flash("Current password is incorrect.", "warning")
+			return redirect(url_for("dashboard"))
+		if new_password != confirm_password:
+			flash("New passwords do not match.", "warning")
+			return redirect(url_for("dashboard"))
+		current_user.set_password(new_password)
+		db.session.commit()
+		flash("Your password has been changed.", "success")
+		return redirect(url_for("dashboard"))
 
 	@app.route("/dashboard/listings/<int:listing_id>/edit", methods=["GET", "POST"])
 	@login_required

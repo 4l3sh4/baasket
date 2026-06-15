@@ -23,6 +23,10 @@
       <span>offers received</span>
     </article>
     <article>
+      <strong>{{ reviews_count }}</strong>
+      <span>reviews received</span>
+    </article>
+    <article>
       <strong>{{ current_user.created_at.strftime('%b %Y') }}</strong>
       <span>member since</span>
     </article>
@@ -39,6 +43,10 @@
 
     <form method="post" class="stack-form" enctype="multipart/form-data">
       <label>
+        Username
+        <input type="text" name="username" value="{{ current_user.username }}" required>
+      </label>
+      <label>
         Bio
         <textarea name="bio" rows="4">{{ current_user.bio }}</textarea>
       </label>
@@ -48,6 +56,39 @@
       </label>
       <button type="submit" class="primary-button">Save profile</button>
     </form>
+
+    <form method="post" action="{{ url_for('change_password') }}" class="stack-form">
+      <button type="button" id="password-toggle" class="secondary-button" style="margin-top:12px;">Change password</button>
+      <div id="password-panel" style="display:none; margin-top: 12px;">
+        <p class="muted-text">Fill these fields to change your password.</p>
+        <label>
+          Current password
+          <input type="password" name="current_password" autocomplete="current-password">
+        </label>
+        <label>
+          New password
+          <input type="password" name="new_password" autocomplete="new-password">
+        </label>
+        <label>
+          Confirm new password
+          <input type="password" name="confirm_password" autocomplete="new-password">
+        </label>
+        <button type="submit" class="primary-button">Change password</button>
+      </div>
+    </form>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const toggle = document.getElementById("password-toggle");
+        const panel = document.getElementById("password-panel");
+        if (!toggle || !panel) return;
+        toggle.addEventListener("click", () => {
+          const isHidden = panel.style.display === "none";
+          panel.style.display = isHidden ? "block" : "none";
+          toggle.textContent = isHidden ? "Hide password fields" : "Change password";
+        });
+      });
+    </script>
   </article>
 </section>
 
@@ -60,26 +101,18 @@
     </div>
   </div>
 
-  <div class="listing-grid compact-grid">
+  <div class="listing-grid thumbnail-grid">
     {% for listing in listings %}
-      <article class="product-card reveal" data-reveal>
-        <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="product-image-wrap">
+      <article class="thumb-card reveal" data-reveal>
+        <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="thumb-image-wrap">
           <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
-          <span class="badge">{{ listing.badge }}</span>
+          <span class="badge {% if listing.buyer_id %}badge-sold{% else %}badge-available{% endif %}">
+            {% if listing.buyer_id %}Sold{% else %}Available{% endif %}
+          </span>
         </a>
-        <div class="product-copy">
-          <p class="product-category">{{ listing.category }}</p>
-          <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
-          <p class="product-meta">{{ listing.condition }} · {{ listing.location }}</p>
-          <div class="price-row">
-            <strong>{{ listing.price|money }}</strong>
-            <div class="dashboard-actions">
-              <span class="dashboard-count">{{ listing.offer_count }} offers</span>
-              <form method="post" action="{{ url_for('delete_listing', listing_id=listing.id) }}">
-                <button type="submit" class="ghost-button">Delete</button>
-              </form>
-            </div>
-          </div>
+        <div class="thumb-meta">
+          <h3 class="thumb-title"><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
+          <div class="thumb-price">{{ listing.price|money }}</div>
         </div>
       </article>
     {% else %}
