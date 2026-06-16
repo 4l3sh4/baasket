@@ -70,10 +70,10 @@
       <img src="{{ featured[0].image_data }}" alt="{{ featured[0].title }}" class="hero-preview">
       <h2>{{ featured[0].title }}</h2>
       <p>{{ featured[0].description }}</p>
-            <div class="price-row">
-              <strong>{{ featured[0].price|money }}</strong>
-              <span>{{ featured[0].badge }}</span>
-            </div>
+      <div class="price-row">
+        <strong>{{ featured[0].price|money }}</strong>
+        <span>{{ featured[0].badge }}</span>
+      </div>
     {% endif %}
   </div>
 </section>
@@ -161,7 +161,7 @@
           <p class="product-category">{{ listing.category }}</p>
           <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
           <p class="product-meta">{{ listing.condition }} · {{ listing.location }} · {{ listing.seller_name }}</p>
-            <div class="price-row">
+          <div class="price-row">
             <strong>{{ listing.price|money }}</strong>
             {% if current_user.is_authenticated %}
               <form method="post" action="{{ url_for('add_to_cart', listing_id=listing.id) }}">

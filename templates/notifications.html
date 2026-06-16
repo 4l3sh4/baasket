@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="section-block">
+
+  <div class="section-heading">
+    <div>
+      <h2>Notifications</h2>
+      <p>Your recent offer and purchase activity.</p>
+    </div>
+  </div>
+
+  {% if notifications %}
+    <div class="inbox-list">
+      {% for notif in notifications %}
+        <div class="inbox-row card-surface" style="cursor:default;">
+
+          <div class="inbox-thumb-wrap">
+            <div class="inbox-thumb inbox-thumb--placeholder" style="font-size:1.4rem;">
+              {% if notif.category == "offer_accepted" %}🎉
+              {% elif notif.category == "offer_declined" %}❌
+              {% elif notif.category == "purchase" %}🛍️
+              {% else %}🔔
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="inbox-body">
+            <div class="inbox-top">
+              <span class="inbox-other">
+                {% if notif.category == "offer_accepted" %}Offer Accepted
+                {% elif notif.category == "offer_declined" %}Offer Declined
+                {% elif notif.category == "purchase" %}Item Sold
+                {% else %}Notification
+                {% endif %}
+              </span>
+              <time class="inbox-time">{{ notif.created_at.strftime('%b %d, %Y') }}</time>
+            </div>
+            <p class="inbox-preview" style="margin-top:4px;">{{ notif.message }}</p>
+          </div>
+
+          <div class="inbox-role">
+            {% if notif.category == "offer_accepted" %}
+              <span class="role-chip role-chip--seller">Accepted</span>
+            {% elif notif.category == "offer_declined" %}
+              <span class="role-chip">Declined</span>
+            {% elif notif.category == "purchase" %}
+              <span class="role-chip role-chip--buyer">Sold</span>
+            {% endif %}
+          </div>
+
+        </div>
+      {% endfor %}
+    </div>
+
+  {% else %}
+    <div class="inbox-empty card-surface">
+      <div class="inbox-empty-icon">🔔</div>
+      <h3>No notifications yet</h3>
+      <p>You'll be notified here when offers are accepted or declined, or when one of your items sells.</p>
+      <a href="{{ url_for('index') }}" class="primary-button" style="display:inline-flex; margin-top:12px;">Browse listings</a>
+    </div>
+  {% endif %}
+
+</section>
+{% endblock %}

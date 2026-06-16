@@ -106,6 +106,9 @@ class Offer(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     acceptanceStatus = db.Column(db.String(20), nullable=False, default="pending")
+    accepted_at = db.Column(db.DateTime, nullable=True)
+    redeemed = db.Column(db.Boolean, nullable=False, default=False)
+    redeemed_at = db.Column(db.DateTime, nullable=True)
 
     sender = db.relationship("User", foreign_keys=[sender_id], backref="offers_sent")
     receiver = db.relationship("User", foreign_keys=[receiver_id], backref="offers_received")
@@ -130,6 +133,10 @@ class OrderModel(db.Model):
     reference = db.Column(db.String(24), nullable=False, index=True)
     note = db.Column(db.Text, nullable=False, default="")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    # Tracking fields for logistics simulator
+    tracking_status = db.Column(db.String(40), nullable=False, default="paid")
+    tracking_updated_at = db.Column(db.DateTime, nullable=True)
+    offer_id = db.Column(db.Integer, db.ForeignKey("offer.id"), nullable=True, index=True)
 
     items = db.relationship("OrderItemModel", backref="order", lazy=True, cascade="all, delete-orphan")
 
@@ -162,6 +169,17 @@ class OrderItemModel(db.Model):
     @property
     def line_total_label(self) -> str:
         return f"RM{Decimal(self.line_total):,.2f}"
+
+
+class OrderTracking(db.Model):
+    __tablename__ = "order_tracking"
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("order_model.id"), nullable=False, index=True)
+    status = db.Column(db.String(40), nullable=False)
+    timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    meta = db.Column(db.Text, nullable=True)
+
+    order = db.relationship("OrderModel", backref="tracking_history")
 
 
 @login_manager.user_loader
@@ -345,6 +363,19 @@ class Payment(db.Model):
     def refundPayment(self) -> bool:
         self.status = "refunded"
         return True
+
+
+class Notification(db.Model):
+    __tablename__ = "notification"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    message = db.Column(db.String(255), nullable=False)
+    category = db.Column(db.String(40), nullable=False, default="general")
+    related_id = db.Column(db.Integer, nullable=True, index=True)
+    is_read = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    user = db.relationship("User", foreign_keys=[user_id], backref="notifications")
 
 
 class Shipping(db.Model):
