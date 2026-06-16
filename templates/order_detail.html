@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card-surface reveal order-detail" data-reveal>
+  <div class="section-heading compact">
+    <p class="eyebrow">Order</p>
+    <h1>Order {{ order.reference }}</h1>
+    <p>Placed on {{ order.created_at.strftime('%b %d, %Y %H:%M') }}</p>
+  </div>
+
+  <div class="receipt-grid">
+    <article>
+      <span>Reference</span>
+      <strong>{{ order.reference }}</strong>
+    </article>
+    <article>
+      <span>Subtotal</span>
+      <strong>{{ order.subtotal_label }}</strong>
+    </article>
+    <article>
+      <span>Fee</span>
+      <strong>{{ order.fee_label }}</strong>
+    </article>
+    <article>
+      <span>Total</span>
+      <strong>{{ order.total_label }}</strong>
+    </article>
+  </div>
+
+  <div class="panel-note receipt-note tracking-panel">
+    <h2>Tracking</h2>
+
+    <div class="tracking-progress" id="tracking-progress" data-status="{{ order.tracking_status }}">
+      <div class="tracking-progress__track">
+        <div class="tracking-progress__fill" id="tracking-fill"></div>
+      </div>
+      <ol class="tracking-progress__nodes">
+        <li class="tracking-node" data-step="paid">
+          <span class="tracking-node__dot" aria-hidden="true">💳</span>
+          <span class="tracking-node__label">Paid</span>
+        </li>
+        <li class="tracking-node" data-step="packed">
+          <span class="tracking-node__dot" aria-hidden="true">📦</span>
+          <span class="tracking-node__label">Packed</span>
+        </li>
+        <li class="tracking-node" data-step="shipped">
+          <span class="tracking-node__dot" aria-hidden="true">🚚</span>
+          <span class="tracking-node__label">Shipped</span>
+        </li>
+        <li class="tracking-node" data-step="delivered">
+          <span class="tracking-node__dot" aria-hidden="true">✅</span>
+          <span class="tracking-node__label">Delivered</span>
+        </li>
+      </ol>
+    </div>
+
+    <p class="tracking-status-text" id="tracking-status-text"></p>
+    <p class="tracking-meta" id="tracking-meta"></p>
+  </div>
+
+  <section class="order-items-panel">
+    <h2>Order details</h2>
+    {% if order.items %}
+      <div class="order-items-list">
+        {% for item in order.items %}
+          <article class="order-item-row">
+            <div class="order-item-row__info">
+              <h3>{{ item.title }}</h3>
+              <p>{{ item.unit_price_label }} each</p>
+            </div>
+            <div class="order-item-row__meta">
+              <span class="order-item-row__qty">Qty {{ item.quantity }}</span>
+              <strong>{{ item.line_total_label }}</strong>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="order-items-empty">No item details available for this order.</p>
+    {% endif %}
+  </section>
+
+  <a href="{{ url_for('index') }}" class="primary-button inline-button">Back to marketplace</a>
+</section>
+
+<script>
+(function () {
+  var orderId = {{ order.id }};
+  var pollInterval = 2000;
+  var STEPS = ['paid', 'packed', 'shipped', 'delivered'];
+  var STATUS_MESSAGES = {
+    paid: 'Payment has been made',
+    packed: 'Your item has been Packed',
+    shipped: 'Your item has been shipped',
+    delivered: 'Your item has been successfully delivered'
+  };
+  var PROGRESS = { paid: 0, packed: 33.33, shipped: 66.66, delivered: 100 };
+
+  var progressEl = document.getElementById('tracking-progress');
+  var fillEl = document.getElementById('tracking-fill');
+  var statusTextEl = document.getElementById('tracking-status-text');
+  var metaEl = document.getElementById('tracking-meta');
+  var nodes = progressEl.querySelectorAll('.tracking-node');
+
+  function updateTracking(status, updatedAt) {
+    if (STEPS.indexOf(status) === -1) return;
+
+    var pct = PROGRESS[status];
+    fillEl.style.width = pct + '%';
+
+    var idxStatus = STEPS.indexOf(status);
+    nodes.forEach(function (node) {
+      var step = node.getAttribute('data-step');
+      var idxStep = STEPS.indexOf(step);
+      node.classList.toggle('is-done', idxStep < idxStatus);
+      node.classList.toggle('is-active', idxStep === idxStatus);
+    });
+
+    statusTextEl.classList.add('is-updating');
+    statusTextEl.textContent = STATUS_MESSAGES[status] || '';
+    window.requestAnimationFrame(function () {
+      statusTextEl.classList.remove('is-updating');
+    });
+
+    if (updatedAt) {
+      metaEl.textContent = 'Last updated: ' + new Date(updatedAt).toLocaleString();
+    }
+  }
+
+  function fetchStatus() {
+    fetch('/orders/' + orderId + '/status')
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j.tracking_status) {
+          updateTracking(j.tracking_status, j.tracking_updated_at);
+        }
+      })
+      .catch(function () {});
+  }
+
+  var initialStatus = progressEl.getAttribute('data-status') || 'paid';
+  var initialUpdated = {{ (order.tracking_updated_at.isoformat() | tojson) if order.tracking_updated_at else 'null' }};
+  updateTracking(initialStatus, initialUpdated);
+  fetchStatus();
+  setInterval(fetchStatus, pollInterval);
+})();
+</script>
+{% endblock %}

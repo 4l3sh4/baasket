@@ -36,6 +36,9 @@
     <p>{{ lines|length }} item(s) for {{ buyer_name }}{% if buyer_email %} · {{ buyer_email }}{% endif %}.</p>
   </div>
 
-  <a href="{{ url_for('index') }}" class="primary-button inline-button">Back to marketplace</a>
+  <div class="action-row" style="margin-top: 18px;">
+    <a href="{{ tracking_link }}" class="primary-button inline-button">View tracking</a>
+    <a href="{{ url_for('index') }}" class="secondary-button inline-button">Back to marketplace</a>
+  </div>
 </section>
 {% endblock %}

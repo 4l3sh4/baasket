@@ -7,7 +7,9 @@
   <div class="browse-header-inner">
     <div class="browse-title-row">
       <a href="{{ url_for('index') }}" class="back-btn">← Back</a>
-      <div class="browse-cat-icon">{{ category_icon }}</div>
+      <div class="browse-cat-icon">
+        <img src="{{ category_icon }}" alt="{{ category }}" class="browse-cat-icon-img">
+      </div>
       <div>
         <p class="eyebrow">Browse</p>
         <h1>{{ category }}</h1>
