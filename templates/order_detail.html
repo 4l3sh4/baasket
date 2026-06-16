@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card-surface reveal order-detail" data-reveal>
+  <div class="section-heading compact">
+    <p class="eyebrow">Order</p>
+    <h1>Order {{ order.reference }}</h1>
+    <p>Placed on {{ order.created_at.strftime('%b %d, %Y %H:%M') }}</p>
+  </div>
+
+  <div class="receipt-grid">
+    <article>
+      <span>Reference</span>
+      <strong>{{ order.reference }}</strong>
+    </article>
+    <article>
+      <span>Subtotal</span>
+      <strong>{{ order.subtotal_label }}</strong>
+    </article>
+    <article>
+      <span>Fee</span>
+      <strong>{{ order.fee_label }}</strong>
+    </article>
+    <article>
+      <span>Total</span>
+      <strong>{{ order.total_label }}</strong>
+    </article>
+  </div>
+
+  <div class="panel-note receipt-note">
+    <h2>Tracking</h2>
+    <div id="tracking-timeline" class="tracking-timeline">
+      <div class="step" data-step="paid">💳 Paid</div>
+      <div class="step" data-step="packed">📦 Packed</div>
+      <div class="step" data-step="shipped">🚚 Shipped</div>
+      <div class="step" data-step="delivered">✅ Delivered</div>
+    </div>
+    <p id="tracking-meta" style="margin-top:8px;"></p>
+  </div>
+
+  <a href="{{ url_for('index') }}" class="primary-button inline-button">Back to marketplace</a>
+</section>
+
+<script>
+(function () {
+  var orderId = {{ order.id }};
+  var pollInterval = 2000;
+  var timeline = document.getElementById('tracking-timeline');
+  var meta = document.getElementById('tracking-meta');
+
+  function updateTimeline(status, updatedAt) {
+    var steps = timeline.querySelectorAll('.step');
+    steps.forEach(function (el) {
+      el.classList.remove('active');
+      el.classList.remove('done');
+      var s = el.getAttribute('data-step');
+      var order = ['paid','packed','shipped','delivered'];
+      var idxStatus = order.indexOf(status);
+      var idxStep = order.indexOf(s);
+      if (idxStep < idxStatus) el.classList.add('done');
+      if (idxStep === idxStatus) el.classList.add('active');
+    });
+    if (updatedAt) {
+      meta.textContent = 'Last updated: ' + new Date(updatedAt).toLocaleString();
+    }
+  }
+
+  function fetchStatus() {
+    fetch('/orders/' + orderId + '/status')
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j.tracking_status) updateTimeline(j.tracking_status, j.tracking_updated_at);
+      })
+      .catch(function () {});
+  }
+
+  fetchStatus();
+  setInterval(fetchStatus, pollInterval);
+})();
+</script>
+
+<style>
+.tracking-timeline { display:flex; gap:12px; margin-top:8px; }
+.step { padding:8px 12px; border-radius:8px; background:#f2f2f2; opacity:0.7 }
+.step.active { background:#ffeaa7; font-weight:700; opacity:1 }
+.step.done { background:#d4f7dc; opacity:1 }
+</style>
+
+{% endblock %}
