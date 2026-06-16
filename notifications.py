@@ -13,7 +13,6 @@ class NotificationObserver(ABC):
     def update(self, event: str, context: dict) -> None:
         raise NotImplementedError
 
-
 class BuyerNotificationObserver(NotificationObserver):
     """Creates an in-app notification for the buyer."""
 

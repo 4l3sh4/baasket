@@ -1,3 +1,5 @@
+# Factory Pattern for creating Listing objects from raw data, and a simple in-memory CatalogRepository
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

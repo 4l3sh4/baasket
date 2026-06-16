@@ -16,7 +16,7 @@
       {% for cat in category_list %}
         <a href="{{ url_for('browse_category', category=cat.name) }}" class="cat-item">
           <div class="cat-icon-wrap">
-            <span class="cat-icon-placeholder">{{ cat.icon }}</span>
+            <img src="{{ cat.icon }}" alt="{{ cat.name }}" class="cat-icon-img">
           </div>
           <span class="cat-label">{{ cat.name }}</span>
         </a>

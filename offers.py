@@ -1,3 +1,6 @@
+# Observer Pattern for offer events. When an offer is submitted,
+# observers are notified and can create notifications for the seller and activity feed entries.
+
 from __future__ import annotations
 
 from collections import defaultdict

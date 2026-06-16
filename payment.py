@@ -1,3 +1,7 @@
+# Strategy Pattern for payment processing. Each PaymentStrategy implementation encapsulates the logic for a specific payment method,
+# allowing the PaymentGateway to process payments without needing to know the details of each method.
+# The gateway can also provide options for available payment methods and calculate fees accordingly.
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
