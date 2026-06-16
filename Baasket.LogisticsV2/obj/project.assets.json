@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "targets": {
     "net8.0": {}
   },
@@ -8,19 +8,19 @@
     "net8.0": []
   },
   "packageFolders": {
-    "/var/folders/86/d7q3zl_97sd6j0_ss0x6xf_80000gn/T/cursor-sandbox-cache/b38ce1537fbf40fefa070b2c481a1431/nuget": {}
+    "C:\\Users\\alesh\\.nuget\\packages\\": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/Baasket.LogisticsV2.csproj",
+      "projectUniqueName": "C:\\Users\\alesh\\OneDrive\\Documents\\Baasket\\baasket\\Baasket.LogisticsV2\\Baasket.LogisticsV2.csproj",
       "projectName": "Baasket.LogisticsV2",
-      "projectPath": "/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/Baasket.LogisticsV2.csproj",
-      "packagesPath": "/var/folders/86/d7q3zl_97sd6j0_ss0x6xf_80000gn/T/cursor-sandbox-cache/b38ce1537fbf40fefa070b2c481a1431/nuget",
-      "outputPath": "/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/obj/",
+      "projectPath": "C:\\Users\\alesh\\OneDrive\\Documents\\Baasket\\baasket\\Baasket.LogisticsV2\\Baasket.LogisticsV2.csproj",
+      "packagesPath": "C:\\Users\\alesh\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\alesh\\OneDrive\\Documents\\Baasket\\baasket\\Baasket.LogisticsV2\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "/Users/ummuaisyah/.nuget/NuGet/NuGet.Config"
+        "C:\\Users\\alesh\\AppData\\Roaming\\NuGet\\NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net8.0"
@@ -30,6 +30,7 @@
       },
       "frameworks": {
         "net8.0": {
+          "framework": "net8.0",
           "targetAlias": "net8.0",
           "projectReferences": {}
         }
@@ -44,10 +45,11 @@
         "auditLevel": "low",
         "auditMode": "direct"
       },
-      "SdkAnalysisLevel": "10.0.200"
+      "SdkAnalysisLevel": "10.0.300"
     },
     "frameworks": {
       "net8.0": {
+        "framework": "net8.0",
         "targetAlias": "net8.0",
         "imports": [
           "net461",
@@ -63,11 +65,15 @@
         "downloadDependencies": [
           {
             "name": "Microsoft.AspNetCore.App.Ref",
-            "version": "[8.0.26, 8.0.26]"
+            "version": "[8.0.28, 8.0.28]"
           },
           {
             "name": "Microsoft.NETCore.App.Ref",
-            "version": "[8.0.26, 8.0.26]"
+            "version": "[8.0.28, 8.0.28]"
+          },
+          {
+            "name": "Microsoft.WindowsDesktop.App.Ref",
+            "version": "[8.0.28, 8.0.28]"
           }
         ],
         "frameworkReferences": {
@@ -75,16 +81,8 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.203/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.301/PortableRuntimeIdentifierGraph.json"
       }
     }
-  },
-  "logs": [
-    {
-      "code": "NU1900",
-      "level": "Warning",
-      "warningLevel": 1,
-      "message": "Error occurred while getting package vulnerability data: Access to the path '/Users/ummuaisyah/.local/share/NuGet/http-cache/670c1461c29885f9aa22c281d8b7da90845b38e4$ps:_api.nuget.org_v3_index.json/vuln_index.dat-new' is denied."
-    }
-  ]
+  }
 }

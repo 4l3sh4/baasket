@@ -1,3 +1,6 @@
+# Observer Pattern for in-app notifications when offers are accepted/declined and purchases are made.
+# Observers create Notification records in the database, which can then be displayed in the UI.
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

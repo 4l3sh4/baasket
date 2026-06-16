@@ -187,26 +187,27 @@ CATEGORIES_MAP: dict[str, list[str]] = {
 
 VALID_CATEGORIES: frozenset[str] = frozenset(CATEGORIES_MAP.keys())
 
-# Placeholder emoji icons for each category (shown in the carousel)
+# PNG icon filenames for each category (served from static/assets/categories/, shown in the carousel)
 CATEGORY_ICONS: dict[str, str] = {
-	"Computers & Tech":        "💻",
-	"Mobile Phones & Gadgets": "📱",
-	"Women's Fashion":         "👗",
-	"Men's Fashion":           "👔",
-	"Beauty & Personal Care":  "💄",
-	"Luxury":                  "👜",
-	"Video Gaming":            "🎮",
-	"Audio":                   "🎧",
-	"Photography":             "📷",
-	"Furniture & Home Living": "🛋️",
-	"TV & Home Appliances":    "📺",
-	"Babies & Kids":           "🍼",
-	"Hobbies & Toys":          "🎨",
-	"Health & Nutrition":      "💊",
-	"Sports Equipment":        "⚽",
-	"Auto Accessories":        "🚗",
-	"Pet Supplies":            "🐾",
+	"Computers & Tech":        "tech.png",
+	"Mobile Phones & Gadgets": "gadget.png",
+	"Women's Fashion":         "womens_fashion.png",
+	"Men's Fashion":           "mens_fashion.png",
+	"Beauty & Personal Care":  "beauty.png",
+	"Luxury":                  "luxury.png",
+	"Video Gaming":            "gaming.png",
+	"Audio":                   "audio.png",
+	"Photography":             "photography.png",
+	"Furniture & Home Living": "furniture.png",
+	"TV & Home Appliances":    "TV.png",
+	"Babies & Kids":           "kids.png",
+	"Hobbies & Toys":          "toys.png",
+	"Health & Nutrition":      "health.png",
+	"Sports Equipment":        "sports.png",
+	"Auto Accessories":        "auto.png",
+	"Pet Supplies":            "pet.png",
 }
+CATEGORY_ICON_FALLBACK = "tech.png"
 
 # Conditions as stored in the database (condition field is VARCHAR(10), so values are truncated)
 # These match what sell.html offers, after the [:10] slice applied in the sell route.
@@ -223,7 +224,13 @@ BROWSE_CONDITIONS: list[str] = [
 def _build_category_list() -> list[dict[str, str]]:
 	"""Return ordered list of dicts with name + icon for the carousel."""
 	return [
-		{"name": name, "icon": CATEGORY_ICONS.get(name, "🏷️")}
+		{
+			"name": name,
+			"icon": url_for(
+				"static",
+				filename=f"assets/categories/{CATEGORY_ICONS.get(name, CATEGORY_ICON_FALLBACK)}",
+			),
+		}
 		for name in CATEGORIES_MAP
 	]
 
@@ -1337,7 +1344,10 @@ def create_app() -> Flask:
 
 		listings = query.all()
 
-		category_icon = CATEGORY_ICONS.get(category, "🏷️")
+		category_icon = url_for(
+			"static",
+			filename=f"assets/categories/{CATEGORY_ICONS.get(category, CATEGORY_ICON_FALLBACK)}",
+		)
 
 		return render_template(
 			"browse.html",
