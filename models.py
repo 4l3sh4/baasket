@@ -9,6 +9,12 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from extensions import db, login_manager
 
+followers_association = db.Table(
+    'follow',
+    db.Column('follower_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
+    db.Column('followed_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
+)
+
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -28,6 +34,35 @@ class User(db.Model, UserMixin):
     last_seen = db.Column(db.DateTime, nullable=True)
 
     listings = db.relationship("ListingModel", foreign_keys="[ListingModel.seller_id]", backref="seller", lazy=True, cascade="all, delete-orphan")
+    followers = db.relationship(
+        "User",
+        secondary=followers_association,
+        primaryjoin=id == followers_association.c.followed_id,
+        secondaryjoin=id == followers_association.c.follower_id,
+        backref=db.backref("following", lazy="dynamic"),
+        lazy="dynamic",
+    )
+
+    def is_following(self, user: "User") -> bool:
+        if user is None:
+            return False
+        return self.following.filter(followers_association.c.followed_id == user.id).count() > 0
+
+    def follow(self, user: "User") -> None:
+        if user is None or user.id == self.id:
+            return
+        if not self.is_following(user):
+            self.following.append(user)
+
+    def unfollow(self, user: "User") -> None:
+        if user is None:
+            return
+        if self.is_following(user):
+            self.following.remove(user)
+
+    @property
+    def follower_count(self) -> int:
+        return self.followers.count()
 
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password)

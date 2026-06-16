@@ -294,7 +294,7 @@ h3 {
 
 .hero-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   margin-top: 28px;
 }
@@ -471,6 +471,17 @@ h3 {
 
 .product-meta {
   margin: 0 0 16px;
+}
+
+.product-meta a {
+  color: var(--accent-deep);
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+
+.product-meta a:hover {
+  opacity: 0.8;
+  text-decoration: underline;
 }
 
 .price-row strong {

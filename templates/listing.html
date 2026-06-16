@@ -10,7 +10,7 @@
     <div class="section-heading compact">
       <p class="eyebrow">{{ listing.category }}</p>
       <h1>{{ listing.title }}</h1>
-      <p class="product-meta">{{ listing.condition }} · {{ listing.location }} · Sold by {{ listing.seller_name }}</p>
+      <p class="product-meta">{{ listing.condition }} · {{ listing.location }} · Sold by <a href="{{ url_for('seller_profile', user_id=listing.seller_id) }}">{{ listing.seller_name }}</a></p>
     </div>
 
     <div class="price-row">
@@ -53,7 +53,7 @@
       </article>
       <article>
         <span>Seller</span>
-        <strong>{{ listing.seller_name }}</strong>
+        <strong><a href="{{ url_for('seller_profile', user_id=listing.seller_id) }}">{{ listing.seller_name }}</a></strong>
       </article>
     </div>
   </article>
@@ -101,7 +101,7 @@
         <div class="product-copy">
           <p class="product-category">{{ item.category }}</p>
           <h3><a href="{{ url_for('listing_detail', listing_id=item.id) }}">{{ item.title }}</a></h3>
-          <p class="product-meta">{{ item.condition }} · {{ item.location }} · {{ item.seller_name }}</p>
+          <p class="product-meta">{{ item.condition }} · {{ item.location }} · <a href="{{ url_for('seller_profile', user_id=item.seller_id) }}">{{ item.seller_name }}</a></p>
             <div class="price-row">
             <strong>{{ item.price|money }}</strong>
             {% if current_user.is_authenticated %}
