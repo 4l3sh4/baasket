@@ -1,0 +1,23 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v8.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v8.0": {
+      "Baasket.LogisticsV2/1.0.0": {
+        "runtime": {
+          "Baasket.LogisticsV2.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Baasket.LogisticsV2/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

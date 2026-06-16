@@ -104,7 +104,16 @@
                       </form>
                     </div>
                   {% elif offer.obj and offer.obj.acceptanceStatus == 'accepted' %}
-                    <div class="offer-resolved offer-resolved--accepted">✓ Offer accepted</div>
+                    {% if offer.obj.redeemed %}
+                      <div class="offer-resolved offer-resolved--accepted">Purchased</div>
+                    {% elif current_user.id == offer.obj.sender_id %}
+                      <div class="offer-resolved offer-resolved--accepted">✓ Offer accepted</div>
+                      <a href="{{ url_for('offer_checkout', offer_id=offer.obj.id) }}" class="primary-button inline-button" style="margin-top:8px; display:inline-flex;">
+                        Buy at {{ offer.obj.amount_label }}
+                      </a>
+                    {% else %}
+                      <div class="offer-resolved offer-resolved--accepted">✓ Offer accepted</div>
+                    {% endif %}
                   {% elif offer.obj and offer.obj.acceptanceStatus == 'declined' %}
                     <div class="offer-resolved offer-resolved--declined">✕ Offer declined</div>
                   {% endif %}

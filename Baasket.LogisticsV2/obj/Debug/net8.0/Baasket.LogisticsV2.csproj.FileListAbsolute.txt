@@ -1,0 +1,12 @@
+/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/bin/Debug/net8.0/Baasket.LogisticsV2.deps.json
+/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/bin/Debug/net8.0/Baasket.LogisticsV2.dll
+/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/bin/Debug/net8.0/Baasket.LogisticsV2.pdb
+/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/obj/Debug/net8.0/Baasket.LogisticsV2.GeneratedMSBuildEditorConfig.editorconfig
+/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/obj/Debug/net8.0/Baasket.LogisticsV2.AssemblyInfoInputs.cache
+/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/obj/Debug/net8.0/Baasket.LogisticsV2.AssemblyInfo.cs
+/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/obj/Debug/net8.0/Baasket.LogisticsV2.csproj.CoreCompileInputs.cache
+/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/obj/Debug/net8.0/Baasket.LogisticsV2.sourcelink.json
+/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/obj/Debug/net8.0/Baasket.LogisticsV2.dll
+/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/obj/Debug/net8.0/refint/Baasket.LogisticsV2.dll
+/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/obj/Debug/net8.0/Baasket.LogisticsV2.pdb
+/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/obj/Debug/net8.0/ref/Baasket.LogisticsV2.dll
