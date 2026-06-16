@@ -95,6 +95,9 @@ class OfferBoard:
         offers = self.history(listing_id)
         return tuple(f"{offer.buyer_display} offered {offer.amount_label}" for offer in offers)
 
+    def activity_feed(self, limit: int = 8) -> tuple[dict[str, object], ...]:
+        return tuple(self._activity_feed.entries[:limit])
+
     def _notify(self, event: OfferEvent) -> None:
         for observer in self._observers:
             observer.update(event)

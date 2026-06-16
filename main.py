@@ -319,6 +319,18 @@ def _mark_listings_sold(lines: list[OrderLine], buyer_id: int) -> None:
 		listing.buyable = False
 
 
+def _recent_offer_activity(limit: int = 8) -> list[dict[str, object]]:
+	entries: list[dict[str, object]] = []
+	for offer in Offer.query.order_by(Offer.created_at.desc()).limit(limit).all():
+		listing = db.session.get(Item, offer.listing_id)
+		title = listing.title if listing else "an item"
+		entries.append({
+			"headline": f"Offer on {title}",
+			"detail": f"{offer.buyer_display} submitted {offer.amount_label}.",
+		})
+	return entries
+
+
 def _create_cart_lines() -> tuple[list[CartLine], Decimal]:
 	cart_ids = [int(listing_id) for listing_id in session.get("cart", [])]
 	counts = Counter(cart_ids)
@@ -588,6 +600,7 @@ def create_app() -> Flask:
 			categories=list(CATEGORIES_MAP.keys()),
 			listing_count=Item.query.count(),
 			category_list=_build_category_list(),
+			activity_feed=_recent_offer_activity(),
 		)
 
 	@app.get("/listing/<int:listing_id>")

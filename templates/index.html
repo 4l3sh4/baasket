@@ -70,111 +70,76 @@
       <img src="{{ featured[0].image_data }}" alt="{{ featured[0].title }}" class="hero-preview">
       <h2>{{ featured[0].title }}</h2>
       <p>{{ featured[0].description }}</p>
-            <div class="price-row">
-              <strong>{{ featured[0].price|money }}</strong>
-              <span>{{ featured[0].badge }}</span>
-            </div>
+      <div class="price-row">
+        <strong>{{ featured[0].price|money }}</strong>
+        <span>{{ featured[0].badge }}</span>
+      </div>
     {% endif %}
   </div>
 </section>
 
-<!-- Recent offers sidebar -->
-<!-- <section class="grid-layout">
+<section class="grid-layout">
   <div class="section-block">
     <div class="section-heading">
       <div>
         <h2>Featured picks</h2>
         <p>Hand-picked inventory that looks and feels like a modern marketplace feed.</p>
       </div>
-    </div> -->
+    </div>
 
-<section class="section-block">
-  <div class="section-heading">
-    <div>
-      <h2>Featured picks</h2>
-      <p>Hand-picked inventory that looks and feels like a modern marketplace feed.</p>
+    <div class="listing-grid">
+      {% for listing in featured %}
+        <article class="product-card reveal" data-reveal>
+          <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="product-image-wrap">
+            <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
+            <span class="badge">{{ listing.badge }}</span>
+          </a>
+          <div class="product-copy">
+            <p class="product-category">{{ listing.category }}</p>
+            <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
+            <p class="product-meta">{{ listing.condition }} · {{ listing.location }} · {{ listing.seller_name }}</p>
+            <div class="price-row">
+              <strong>{{ listing.price|money }}</strong>
+              {% if current_user.is_authenticated %}
+                <form method="post" action="{{ url_for('add_to_cart', listing_id=listing.id) }}">
+                  <button type="submit" class="ghost-button">Add</button>
+                </form>
+              {% else %}
+                <a href="{{ url_for('login', next=url_for('listing_detail', listing_id=listing.id)) }}" class="ghost-button">Add</a>
+              {% endif %}
+            </div>
+          </div>
+        </article>
+      {% endfor %}
     </div>
   </div>
 
-<!--    <div class="listing-grid">
-      {% for listing in featured %}
-        <article class="product-card reveal" data-reveal>
-          <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="product-image-wrap">
-            <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
-            <span class="badge">{{ listing.badge }}</span>
-          </a>
-          <div class="product-copy">
-            <p class="product-category">{{ listing.category }}</p>
-            <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
-            <p class="product-meta">{{ listing.condition }} · {{ listing.location }} · {{ listing.seller_name }}</p>
-            <div class="price-row">
-              <strong>{{ listing.price|money }}</strong>
-              {% if current_user.is_authenticated %}
-                <form method="post" action="{{ url_for('add_to_cart', listing_id=listing.id) }}">
-                  <button type="submit" class="ghost-button">Add</button>
-                </form>
-              {% else %}
-                <a href="{{ url_for('login', next=url_for('listing_detail', listing_id=listing.id)) }}" class="ghost-button">Add</a>
-              {% endif %}
-            </div>
-          </div>
-        </article>
-      {% endfor %}
-    </div>
-  </div>
+  <aside class="side-panel reveal" data-reveal>
+    <div class="section-heading compact">
+      <h2>Recent offers</h2>
+      <p>Observer-driven updates from the offer board.</p>
+    </div>
 
-  <aside class="side-panel reveal" data-reveal>
-    <div class="section-heading compact">
-      <h2>Recent offers</h2>
-      <p>Observer-driven updates from the offer board.</p>
-    </div>
-
-    <div class="feed-list">
-      {% for entry in activity_feed %}
-        <article class="feed-item">
-          <span class="feed-dot"></span>
-          <div>
-            <strong>{{ entry.headline }}</strong>
-            <p>{{ entry.detail }}</p>
-          </div>
-        </article>
-      {% else %}
-        <p class="empty-state">Offers will appear here once buyers start negotiating.</p>
-      {% endfor %}
-    </div>
-
-    <div class="panel-note">
-      <h3>Why this structure works</h3>
-      <p>The listing factory owns item creation, payment choices stay interchangeable, and offer updates are broadcast
-      through observers instead of hard-coded callbacks.</p>
-    </div>
-  </aside> -->
-
-  <div class="listing-grid">
-    {% for listing in featured %}
-      <article class="product-card reveal" data-reveal>
-        <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="product-image-wrap">
-          <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
-          <span class="badge">{{ listing.badge }}</span>
-        </a>
-        <div class="product-copy">
-          <p class="product-category">{{ listing.category }}</p>
-          <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
-          <p class="product-meta">{{ listing.condition }} · {{ listing.location }} · {{ listing.seller_name }}</p>
-          <div class="price-row">
-            <strong>{{ listing.price|money }}</strong>
-            {% if current_user.is_authenticated %}
-              <form method="post" action="{{ url_for('add_to_cart', listing_id=listing.id) }}">
-                <button type="submit" class="ghost-button">Add</button>
-              </form>
-            {% else %}
-              <a href="{{ url_for('login', next=url_for('listing_detail', listing_id=listing.id)) }}" class="ghost-button">Add</a>
-            {% endif %}
+    <div class="feed-list">
+      {% for entry in activity_feed %}
+        <article class="feed-item">
+          <span class="feed-dot"></span>
+          <div>
+            <strong>{{ entry.headline }}</strong>
+            <p>{{ entry.detail }}</p>
           </div>
-        </div>
-      </article>
-    {% endfor %}
-  </div>
+        </article>
+      {% else %}
+        <p class="empty-state">Offers will appear here once buyers start negotiating.</p>
+      {% endfor %}
+    </div>
+
+    <div class="panel-note">
+      <h3>Why this structure works</h3>
+      <p>The listing factory owns item creation, payment choices stay interchangeable, and offer updates are broadcast
+      through observers instead of hard-coded callbacks.</p>
+    </div>
+  </aside>
 </section>
 
 <section class="section-block">
@@ -196,7 +161,7 @@
           <p class="product-category">{{ listing.category }}</p>
           <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
           <p class="product-meta">{{ listing.condition }} · {{ listing.location }} · {{ listing.seller_name }}</p>
-            <div class="price-row">
+          <div class="price-row">
             <strong>{{ listing.price|money }}</strong>
             {% if current_user.is_authenticated %}
               <form method="post" action="{{ url_for('add_to_cart', listing_id=listing.id) }}">
