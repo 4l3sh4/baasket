@@ -2,21 +2,25 @@ from __future__ import annotations
 
 import os
 from collections import Counter
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
 from flask import Flask, flash, redirect, render_template, request, session, url_for
+from flask.typing import ResponseReturnValue
 from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy import or_, text
 from werkzeug.utils import secure_filename
+from typing import TypedDict
 
 from catalog import ListingFactory, _build_art, build_seeded_catalog
 from extensions import db, login_manager
 from models import Item, Notification, Offer, OrderItemModel, OrderModel, User, ChatSession, Message, Review
 from notifications import build_notification_subject
-from offers import OfferBoard
-from payment import build_payment_gateway
+from logistics_v2.flask_adapter import run_checkout_logistics_v2
+from offers import OfferBoard, get_redeemable_offer
+from payment import PaymentReceipt, build_payment_gateway
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -247,10 +251,78 @@ def _money(value: object) -> str:
 	return f"RM{amount:,.2f}"
 
 
-def _create_cart_lines() -> tuple[list[dict[str, object]], Decimal]:
+class CartLine(TypedDict):
+	listing: Item
+	quantity: int
+	line_total: Decimal
+
+
+class OrderLine(TypedDict):
+	listing: Item
+	quantity: int
+	line_total: Decimal
+	unit_price: Decimal
+
+
+def _persist_order(
+	*,
+	buyer_name: str,
+	buyer_email: str,
+	receipt: PaymentReceipt,
+	note: str,
+	lines: list[OrderLine],
+	offer_id: int | None = None,
+) -> OrderModel:
+	order = OrderModel()
+	order.buyer_name = buyer_name
+	order.buyer_email = buyer_email
+	order.payment_method = receipt.strategy_code
+	order.subtotal = receipt.subtotal
+	order.fee = receipt.fee
+	order.total = receipt.total
+	order.reference = receipt.reference
+	order.note = note
+	order.offer_id = offer_id
+	db.session.add(order)
+	db.session.flush()
+
+	for line in lines:
+		listing = line["listing"]
+		order_item = OrderItemModel()
+		order_item.order_id = order.id
+		order_item.listing_id = listing.id
+		order_item.title = listing.title
+		order_item.quantity = line["quantity"]
+		order_item.unit_price = line["unit_price"]
+		order_item.line_total = line["line_total"]
+		db.session.add(order_item)
+
+	return order
+
+
+def _notify_sellers_purchase(lines: list[OrderLine], notification_subject: object) -> None:
+	seller_titles: dict[int, list[str]] = {}
+	for line in lines:
+		listing = line["listing"]
+		seller_titles.setdefault(listing.seller_id, []).append(listing.title)
+	for seller_id, titles in seller_titles.items():
+		notification_subject.notify("purchase", {
+			"seller_id": seller_id,
+			"titles": titles,
+		})
+
+
+def _mark_listings_sold(lines: list[OrderLine], buyer_id: int) -> None:
+	for line in lines:
+		listing = line["listing"]
+		listing.buyer_id = buyer_id
+		listing.buyable = False
+
+
+def _create_cart_lines() -> tuple[list[CartLine], Decimal]:
 	cart_ids = [int(listing_id) for listing_id in session.get("cart", [])]
 	counts = Counter(cart_ids)
-	lines: list[dict[str, object]] = []
+	lines: list[CartLine] = []
 	subtotal = Decimal("0.00")
 
 	for listing_id, quantity in counts.items():
@@ -340,39 +412,40 @@ def _sales_history_for_user(user_id: int) -> list[dict[str, object]]:
 
 def _seed_database() -> None:
 	if User.query.count() == 0:
-		demo_user = User(username="baasket", email="hello@baasket.local", bio="Baasket demo storefront")
+		demo_user = User()
+		demo_user.username = "baasket"
+		demo_user.email = "hello@baasket.local"
+		demo_user.bio = "Baasket demo storefront"
 		demo_user.set_password("baasket123")
 		db.session.add(demo_user)
 		db.session.flush()
 	else:
 		demo_user = User.query.filter_by(username="baasket").first() or User.query.first()
 
-	# Remove all listings owned by the demo/seed account so only real users' items remain
+	# Keep demo catalog listings alongside real user listings.
 	if demo_user is not None:
-		seed_listings = Item.query.filter_by(seller_id=demo_user.id).all()
-		for listing in seed_listings:
-			db.session.delete(listing)
-		if seed_listings:
-			db.session.commit()
-
-	# Only seed if there are still no listings (i.e. no real users have posted yet).
-	# Once a real user creates a listing this block never runs again.
-	if Item.query.count() == 0 and demo_user is not None:
+		existing_titles = {
+			listing.title
+			for listing in Item.query.filter_by(seller_id=demo_user.id).all()
+		}
 		seed_repository = build_seeded_catalog(ListingFactory())
 		for seed_listing in seed_repository.all():
-			db.session.add(
-				Item(
-					seller_id=demo_user.id,
-					title=seed_listing.title,
-					category=seed_listing.category,
-					price=seed_listing.price,
-					condition=seed_listing.condition,
-					location=seed_listing.location,
-					description=seed_listing.description,
-					image_path="",
-					seed_image_data=seed_listing.image_data,
-				)
-			)
+			if seed_listing.title in existing_titles:
+				continue
+			listing = Item()
+			listing.seller_id = demo_user.id
+			listing.title = seed_listing.title
+			listing.category = seed_listing.category
+			listing.subcategory = seed_listing.subcategory_id
+			listing.price = float(seed_listing.price)
+			listing.condition = seed_listing.condition
+			listing.location = seed_listing.location or "Local pickup"
+			listing.description = seed_listing.description
+			listing.image_path = ""
+			listing.seed_image_data = seed_listing.image_data
+			listing.buyable = seed_listing.buyable
+			listing.reserved = seed_listing.reserved
+			db.session.add(listing)
 	db.session.commit()
 
 
@@ -482,6 +555,7 @@ def create_app() -> Flask:
 				"notification": [
 					("category", "TEXT"),
 					("is_read", "INTEGER DEFAULT 0"),
+					("related_id", "INTEGER"),
 				],
 			}
 
@@ -499,7 +573,7 @@ def create_app() -> Flask:
 		_ensure_schema_columns()
 
 	@app.get("/")
-	def index() -> str:
+	def index() -> ResponseReturnValue:
 		search = request.args.get("q", "").strip()
 		category = request.args.get("category", "").strip()
 		listings = _search_listings(search=search, category=category)
@@ -517,7 +591,7 @@ def create_app() -> Flask:
 		)
 
 	@app.get("/listing/<int:listing_id>")
-	def listing_detail(listing_id: int) -> str:
+	def listing_detail(listing_id: int) -> ResponseReturnValue:
 		listing = db.session.get(Item, listing_id)
 		if listing is None:
 			flash("That listing is no longer available.", "warning")
@@ -546,7 +620,7 @@ def create_app() -> Flask:
 
 	@app.route("/sell", methods=["GET", "POST"])
 	@login_required
-	def sell() -> str:
+	def sell() -> ResponseReturnValue:
 		if request.method == "POST":
 			title = request.form.get("title", "").strip()[:100]
 			category = request.form.get("category", "").strip()
@@ -578,20 +652,19 @@ def create_app() -> Flask:
 				flash("Enter a valid asking price.", "warning")
 				return redirect(url_for("sell"))
 
-			listing = Item(
-				seller_id=current_user.id,
-				title=title,
-				category=category,
-				subcategory=subcategory,
-				price=price,
-				condition=condition,
-				location=location,
-				description=description,
-				image_path=image_path or "",
-				seed_image_data=seed_image_data,
-				likes=0,
-				buyable=buyable,
-			)
+			listing = Item()
+			listing.seller_id = current_user.id
+			listing.title = title
+			listing.category = category
+			listing.subcategory = subcategory
+			listing.price = price
+			listing.condition = condition
+			listing.location = location
+			listing.description = description
+			listing.image_path = image_path or ""
+			listing.seed_image_data = seed_image_data
+			listing.likes = 0
+			listing.buyable = buyable
 			db.session.add(listing)
 			db.session.commit()
 			flash("Your listing is now live on Baasket.", "success")
@@ -605,7 +678,7 @@ def create_app() -> Flask:
 
 	@app.get("/cart")
 	@login_required
-	def cart_view() -> str:
+	def cart_view() -> ResponseReturnValue:
 		lines, subtotal = _create_cart_lines()
 		return render_template("cart.html", title="Your Basket | Baasket", lines=lines, subtotal=subtotal)
 
@@ -625,7 +698,7 @@ def create_app() -> Flask:
 
 	@app.post("/checkout")
 	@login_required
-	def checkout():
+	def checkout() -> ResponseReturnValue:
 		lines, subtotal = _create_cart_lines()
 		if not lines:
 			flash("Add a few items before checking out.", "warning")
@@ -645,48 +718,58 @@ def create_app() -> Flask:
 			items=[line["listing"].title for line in lines],
 		)
 
-		order = OrderModel(
+		order_lines: list[OrderLine] = [
+			{
+				"listing": line["listing"],
+				"quantity": line["quantity"],
+				"line_total": line["line_total"],
+				"unit_price": Decimal(str(line["listing"].price)),
+			}
+			for line in lines
+		]
+		order = _persist_order(
 			buyer_name=buyer_name,
 			buyer_email=buyer_email,
-			payment_method=receipt.strategy_code,
-			subtotal=receipt.subtotal,
-			fee=receipt.fee,
-			total=receipt.total,
-			reference=receipt.reference,
+			receipt=receipt,
 			note=note,
+			lines=order_lines,
 		)
-		db.session.add(order)
-		db.session.flush()
-		for line in lines:
-			listing = line["listing"]
-			listing.buyer_id = current_user.id
-			listing.buyable = False
-			db.session.add(
-				OrderItemModel(
-					order_id=order.id,
-					listing_id=listing.id,
-					title=listing.title,
-					quantity=line["quantity"],
-					unit_price=listing.price,
-					line_total=line["line_total"],
-				)
-			)
+		_mark_listings_sold(order_lines, current_user.id)
 		db.session.commit()
 
-		# Notify each seller whose item was purchased
-		seller_titles: dict[int, list[str]] = {}
-		for line in lines:
-			listing = line["listing"]
-			seller_titles.setdefault(listing.seller_id, []).append(listing.title)
-		for seller_id, titles in seller_titles.items():
-			notification_subject.notify("purchase", {
-				"seller_id": seller_id,
-				"titles": titles,
-			})
+		_notify_sellers_purchase(order_lines, notification_subject)
+
+		offer_id_raw = request.form.get("offer_id")
+		offer_id = int(offer_id_raw) if offer_id_raw else None
+
+		try:
+			run_checkout_logistics_v2(
+				app=app,
+				order_id=order.id,
+				buyer_id=current_user.id,
+				buyer_name=buyer_name,
+				buyer_email=buyer_email,
+				payment_method=receipt.strategy_code,
+				receipt=receipt,
+				offer_id=offer_id,
+			)
+		except Exception:
+			pass
 		db.session.commit()
 
 		session.pop("cart", None)
 		flash("Payment processed successfully.", "success")
+
+		if offer_id:
+			try:
+				offer = db.session.get(Offer, offer_id)
+				if offer and not getattr(offer, "redeemed", False):
+					offer.redeemed = True
+					offer.redeemed_at = datetime.utcnow()
+				db.session.commit()
+			except Exception:
+				pass
+
 		return render_template(
 			"checkout.html",
 			title="Checkout Complete | Baasket",
@@ -694,6 +777,96 @@ def create_app() -> Flask:
 			lines=lines,
 			buyer_name=buyer_name,
 			buyer_email=buyer_email,
+			tracking_link=url_for("order_detail", order_id=order.id),
+		)
+
+	@app.route("/offers/<int:offer_id>/checkout", methods=["GET", "POST"])
+	@login_required
+	def offer_checkout(offer_id: int) -> ResponseReturnValue:
+		offer = get_redeemable_offer(offer_id, current_user.id)
+		if offer is None:
+			flash("This offer is not available for purchase.", "warning")
+			return redirect(url_for("notifications_view"))
+
+		listing = db.session.get(Item, offer.listing_id)
+		if listing is None:
+			flash("The listing for this offer is no longer available.", "warning")
+			return redirect(url_for("index"))
+
+		offer_subtotal = Decimal(str(offer.amount))
+
+		if request.method == "GET":
+			return render_template(
+				"offer_checkout.html",
+				title=f"Buy at Offer Price | Baasket",
+				offer=offer,
+				listing=listing,
+				subtotal=offer_subtotal,
+			)
+
+		buyer_name = request.form.get("buyer_name", current_user.username).strip() or current_user.username
+		buyer_email = request.form.get("buyer_email", current_user.email).strip() or current_user.email
+		payment_method = request.form.get("payment_method", "card")
+		note = request.form.get("note", "").strip()
+
+		receipt = payment_gateway.charge(
+			payment_method,
+			offer_subtotal,
+			sender_name=buyer_name,
+			sender_email=buyer_email,
+			note=note,
+			items=[listing.title],
+		)
+
+		order_lines: list[OrderLine] = [{
+			"listing": listing,
+			"quantity": 1,
+			"line_total": offer_subtotal,
+			"unit_price": offer_subtotal,
+		}]
+		order = _persist_order(
+			buyer_name=buyer_name,
+			buyer_email=buyer_email,
+			receipt=receipt,
+			note=note,
+			lines=order_lines,
+			offer_id=offer.id,
+		)
+		_mark_listings_sold(order_lines, current_user.id)
+		_notify_sellers_purchase(order_lines, notification_subject)
+
+		try:
+			run_checkout_logistics_v2(
+				app=app,
+				order_id=order.id,
+				buyer_id=current_user.id,
+				buyer_name=buyer_name,
+				buyer_email=buyer_email,
+				payment_method=receipt.strategy_code,
+				receipt=receipt,
+				offer_id=offer.id,
+			)
+		except Exception:
+			pass
+
+		offer.redeemed = True
+		offer.redeemed_at = datetime.utcnow()
+		db.session.commit()
+
+		flash("Payment processed successfully.", "success")
+		checkout_lines = [{
+			"listing": listing,
+			"quantity": 1,
+			"line_total": offer_subtotal,
+		}]
+		return render_template(
+			"checkout.html",
+			title="Checkout Complete | Baasket",
+			receipt=receipt,
+			lines=checkout_lines,
+			buyer_name=buyer_name,
+			buyer_email=buyer_email,
+			tracking_link=url_for("order_detail", order_id=order.id),
 		)
 
 	@app.post("/listing/<int:listing_id>/offer")
@@ -723,7 +896,12 @@ def create_app() -> Flask:
 			return redirect(url_for("chat_view", chat_id=existing.chatID))
 
 		from uuid import uuid4
-		chat = ChatSession(chatID=uuid4().hex, creator_id=current_user.id, buyer_id=current_user.id, seller_id=listing.seller_id, listing_id=listing.id)
+		chat = ChatSession()
+		chat.chatID = uuid4().hex
+		chat.creator_id = current_user.id
+		chat.buyer_id = current_user.id
+		chat.seller_id = listing.seller_id
+		chat.listing_id = listing.id
 		db.session.add(chat)
 		db.session.commit()
 		flash("Chat started with the seller.", "success")
@@ -731,7 +909,7 @@ def create_app() -> Flask:
 
 	@app.get("/chat/<string:chat_id>")
 	@login_required
-	def chat_view(chat_id: str):
+	def chat_view(chat_id: str) -> ResponseReturnValue:
 		chat = ChatSession.query.filter_by(chatID=chat_id).first()
 		if chat is None:
 			flash("Chat session not found.", "warning")
@@ -752,7 +930,7 @@ def create_app() -> Flask:
 
 	@app.get("/messages")
 	@login_required
-	def messages_inbox() -> str:
+	def messages_inbox() -> ResponseReturnValue:
 		chats = (
 			ChatSession.query.filter(
 				or_(
@@ -799,7 +977,11 @@ def create_app() -> Flask:
 			flash("Message cannot be empty.", "warning")
 			return redirect(url_for("chat_view", chat_id=chat_id))
 		from uuid import uuid4
-		msg = Message(messageID=uuid4().hex, content=content, session_id=chat.chatID, creator_id=current_user.id)
+		msg = Message()
+		msg.messageID = uuid4().hex
+		msg.content = content
+		msg.session_id = chat.chatID
+		msg.creator_id = current_user.id
 		db.session.add(msg)
 		db.session.commit()
 		flash("Message sent.", "success")
@@ -807,7 +989,7 @@ def create_app() -> Flask:
 
 	@app.post("/chat/<string:chat_id>/offer")
 	@login_required
-	def chat_offer(chat_id: str):
+	def chat_offer(chat_id: str) -> ResponseReturnValue:
 		chat = ChatSession.query.filter_by(chatID=chat_id).first()
 		if chat is None:
 			flash("Invalid chat session.", "warning")
@@ -828,16 +1010,19 @@ def create_app() -> Flask:
 		if amount <= 0:
 			flash("Offer amounts must be greater than zero.", "warning")
 			return redirect(url_for("chat_view", chat_id=chat_id))
-		offer = Offer(listing_id=listing.id, sender_id=current_user.id, receiver_id=listing.seller_id, amount=amount)
+		offer = Offer()
+		offer.listing_id = listing.id
+		offer.sender_id = current_user.id
+		offer.receiver_id = listing.seller_id
+		offer.amount = amount
 		db.session.add(offer)
 		db.session.flush()  # populate offer.id before commit
 		# Post a message into the chat thread so the offer appears inline
-		offer_msg = Message(
-			messageID=uuid4().hex,
-			content=f"OFFER:{offer.id}",
-			session_id=chat.chatID,
-			creator_id=current_user.id,
-		)
+		offer_msg = Message()
+		offer_msg.messageID = uuid4().hex
+		offer_msg.content = f"OFFER:{offer.id}"
+		offer_msg.session_id = chat.chatID
+		offer_msg.creator_id = current_user.id
 		db.session.add(offer_msg)
 		db.session.commit()
 		flash("Your offer was sent in chat.", "success")
@@ -845,7 +1030,7 @@ def create_app() -> Flask:
 
 	@app.post("/chat/<string:chat_id>/offer/<int:offer_id>/accept")
 	@login_required
-	def accept_offer(chat_id: str, offer_id: int):
+	def accept_offer(chat_id: str, offer_id: int) -> ResponseReturnValue:
 		chat = ChatSession.query.filter_by(chatID=chat_id).first()
 		if chat is None or current_user.id != chat.seller_id:
 			flash("Not authorised.", "warning")
@@ -855,17 +1040,18 @@ def create_app() -> Flask:
 			flash("Offer not found or already resolved.", "warning")
 			return redirect(url_for("chat_view", chat_id=chat_id))
 		offer.acceptanceStatus = "accepted"
-		notify = Message(
-			messageID=uuid4().hex,
-			content=f"✓ Offer of {offer.amount_label} accepted! Please proceed with payment.",
-			session_id=chat.chatID,
-			creator_id=current_user.id,
-		)
+		offer.accepted_at = datetime.utcnow()
+		notify = Message()
+		notify.messageID = uuid4().hex
+		notify.content = f"✓ Offer of {offer.amount_label} accepted! Please proceed with payment."
+		notify.session_id = chat.chatID
+		notify.creator_id = current_user.id
 		db.session.add(notify)
 		listing = db.session.get(Item, offer.listing_id)
 		notification_subject.notify("offer_accepted", {
 			"buyer_id": offer.sender_id,
 			"seller_id": current_user.id,
+			"offer_id": offer.id,
 			"amount": offer.amount_label,
 			"listing_title": listing.title if listing else "an item",
 		})
@@ -875,7 +1061,7 @@ def create_app() -> Flask:
 
 	@app.post("/chat/<string:chat_id>/offer/<int:offer_id>/decline")
 	@login_required
-	def decline_offer(chat_id: str, offer_id: int):
+	def decline_offer(chat_id: str, offer_id: int) -> ResponseReturnValue:
 		chat = ChatSession.query.filter_by(chatID=chat_id).first()
 		if chat is None or current_user.id != chat.seller_id:
 			flash("Not authorised.", "warning")
@@ -885,12 +1071,11 @@ def create_app() -> Flask:
 			flash("Offer not found or already resolved.", "warning")
 			return redirect(url_for("chat_view", chat_id=chat_id))
 		offer.acceptanceStatus = "declined"
-		notify = Message(
-			messageID=uuid4().hex,
-			content=f"✕ The offer of {offer.amount_label} was declined.",
-			session_id=chat.chatID,
-			creator_id=current_user.id,
-		)
+		notify = Message()
+		notify.messageID = uuid4().hex
+		notify.content = f"✕ The offer of {offer.amount_label} was declined."
+		notify.session_id = chat.chatID
+		notify.creator_id = current_user.id
 		db.session.add(notify)
 		listing = db.session.get(Item, offer.listing_id)
 		notification_subject.notify("offer_declined", {
@@ -903,7 +1088,7 @@ def create_app() -> Flask:
 		return redirect(url_for("chat_view", chat_id=chat_id))
 
 	@app.route("/register", methods=["GET", "POST"])
-	def register() -> str:
+	def register() -> ResponseReturnValue:
 		if request.method == "POST":
 			username = request.form.get("username", "").strip()
 			email = request.form.get("email", "").strip().lower()
@@ -919,7 +1104,11 @@ def create_app() -> Flask:
 				flash("A user with that username or email already exists.", "warning")
 				return redirect(url_for("register"))
 
-			user = User(username=username, email=email, bio=bio, profile_image=profile_image or "")
+			user = User()
+			user.username = username
+			user.email = email
+			user.bio = bio
+			user.profile_image = profile_image or ""
 			user.set_password(password)
 			db.session.add(user)
 			db.session.commit()
@@ -930,7 +1119,7 @@ def create_app() -> Flask:
 		return render_template("register.html", title="Create Account | Baasket")
 
 	@app.route("/login", methods=["GET", "POST"])
-	def login() -> str:
+	def login() -> ResponseReturnValue:
 		if request.method == "POST":
 			identifier = request.form.get("identifier", "").strip().lower()
 			password = request.form.get("password", "")
@@ -948,14 +1137,14 @@ def create_app() -> Flask:
 
 	@app.get("/logout")
 	@login_required
-	def logout() -> str:
+	def logout() -> ResponseReturnValue:
 		logout_user()
 		flash("You have been signed out.", "info")
 		return redirect(url_for("index"))
 
 	@app.route("/dashboard", methods=["GET", "POST"])
 	@login_required
-	def dashboard() -> str:
+	def dashboard() -> ResponseReturnValue:
 		if request.method == "POST":
 			new_username = request.form.get("username", "").strip()
 			if not new_username:
@@ -1016,7 +1205,7 @@ def create_app() -> Flask:
 
 	@app.route("/dashboard/listings/<int:listing_id>/edit", methods=["GET", "POST"])
 	@login_required
-	def edit_listing(listing_id: int) -> str:
+	def edit_listing(listing_id: int) -> ResponseReturnValue:
 		listing = db.session.get(Item, listing_id)
 		if listing is None or listing.seller_id != current_user.id:
 			flash("That listing cannot be edited.", "warning")
@@ -1078,7 +1267,7 @@ def create_app() -> Flask:
 		return redirect(url_for("dashboard"))
 
 	@app.get("/browse/<path:category>")
-	def browse_category(category: str) -> str:
+	def browse_category(category: str) -> ResponseReturnValue:
 		"""Category browse page with subcategory, sort, condition, and price filters."""
 		if category not in VALID_CATEGORIES:
 			flash("That category does not exist.", "warning")
@@ -1154,7 +1343,7 @@ def create_app() -> Flask:
 
 	@app.get("/notifications")
 	@login_required
-	def notifications_view() -> str:
+	def notifications_view() -> ResponseReturnValue:
 		notifs = (
 			Notification.query.filter_by(user_id=current_user.id)
 			.order_by(Notification.created_at.desc())
@@ -1170,6 +1359,29 @@ def create_app() -> Flask:
 			notifications=notifs,
 		)
 
+
+	@app.get('/orders/<int:order_id>') # logistic
+	@login_required
+	def order_detail(order_id: int) -> ResponseReturnValue:
+		order = db.session.get(OrderModel, order_id)
+		if order is None:
+			flash('Order not found', 'warning')
+			return redirect(url_for('index'))
+		return render_template('order_detail.html', order=order, title='Order Details')
+
+
+	@app.get('/orders/<int:order_id>/status')
+	@login_required
+	def order_status(order_id: int):
+		order = db.session.get(OrderModel, order_id)
+		if order is None:
+			return {'error': 'not found'}, 404
+		return {
+			'order_id': order.id,
+			'tracking_status': order.tracking_status,
+			'tracking_updated_at': order.tracking_updated_at.isoformat() if order.tracking_updated_at else None,
+		}
+
 	return app
 
 
@@ -1177,4 +1389,7 @@ app = create_app()
 
 
 if __name__ == "__main__":
-	app.run(debug=True)
+	# app.run(debug=True)
+	import os
+	port = int(os.environ.get("PORT", 5000))
+	app.run(debug=True, port=port)

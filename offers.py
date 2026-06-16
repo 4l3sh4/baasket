@@ -10,6 +10,25 @@ from extensions import db
 from models import Item, Offer, User
 
 
+def get_redeemable_offer(offer_id: int, buyer_id: int) -> Offer | None:
+    """Return an accepted, unredeemed offer the buyer may purchase at offer price."""
+    offer = db.session.get(Offer, offer_id)
+    if offer is None:
+        return None
+    if offer.sender_id != buyer_id:
+        return None
+    if offer.acceptanceStatus != "accepted":
+        return None
+    if offer.redeemed:
+        return None
+
+    listing = db.session.get(Item, offer.listing_id)
+    if listing is None or not listing.buyable:
+        return None
+
+    return offer
+
+
 @dataclass(slots=True)
 class OfferEvent:
     listing_id: int

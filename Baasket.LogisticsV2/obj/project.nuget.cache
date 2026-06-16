@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "dgSpecHash": "r0zceDw45ak=",
+  "success": true,
+  "projectFilePath": "/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/Baasket.LogisticsV2.csproj",
+  "expectedPackageFiles": [
+    "/var/folders/86/d7q3zl_97sd6j0_ss0x6xf_80000gn/T/cursor-sandbox-cache/b38ce1537fbf40fefa070b2c481a1431/nuget/microsoft.netcore.app.ref/8.0.26/microsoft.netcore.app.ref.8.0.26.nupkg.sha512",
+    "/var/folders/86/d7q3zl_97sd6j0_ss0x6xf_80000gn/T/cursor-sandbox-cache/b38ce1537fbf40fefa070b2c481a1431/nuget/microsoft.aspnetcore.app.ref/8.0.26/microsoft.aspnetcore.app.ref.8.0.26.nupkg.sha512"
+  ],
+  "logs": [
+    {
+      "code": "NU1900",
+      "level": "Warning",
+      "message": "Error occurred while getting package vulnerability data: Access to the path '/Users/ummuaisyah/.local/share/NuGet/http-cache/670c1461c29885f9aa22c281d8b7da90845b38e4$ps:_api.nuget.org_v3_index.json/vuln_index.dat-new' is denied.",
+      "projectPath": "/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/Baasket.LogisticsV2.csproj",
+      "warningLevel": 1,
+      "filePath": "/Users/ummuaisyah/Desktop/Projects/baasket/Baasket.LogisticsV2/Baasket.LogisticsV2.csproj",
+      "targetGraphs": []
+    }
+  ]
+}
