@@ -1,3 +1,6 @@
+# Observer Pattern for in-app notifications when offers are accepted/declined and purchases are made.
+# Observers create Notification records in the database, which can then be displayed in the UI.
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -27,13 +30,22 @@ class BuyerNotificationObserver(NotificationObserver):
         if event == "offer_accepted":
             msg = f"Your offer of {context.get('amount', '')} on \"{context.get('listing_title', 'an item')}\" was accepted!"
             category = "offer_accepted"
+            related_id = context.get("offer_id")
         elif event == "offer_declined":
             msg = f"Your offer of {context.get('amount', '')} on \"{context.get('listing_title', 'an item')}\" was declined."
             category = "offer_declined"
+            related_id = None
         else:
             return
 
-        db.session.add(Notification(user_id=buyer_id, message=msg, category=category))
+        db.session.add(
+            Notification(
+                user_id=buyer_id,
+                message=msg,
+                category=category,
+                related_id=related_id,
+            )
+        )
 
 
 class SellerNotificationObserver(NotificationObserver):

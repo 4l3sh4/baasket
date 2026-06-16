@@ -1,3 +1,6 @@
+# Observer Pattern for offer events. When an offer is submitted,
+# observers are notified and can create notifications for the seller and activity feed entries.
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -8,6 +11,25 @@ from typing import Protocol
 
 from extensions import db
 from models import Item, Offer, User
+
+
+def get_redeemable_offer(offer_id: int, buyer_id: int) -> Offer | None:
+    """Return an accepted, unredeemed offer the buyer may purchase at offer price."""
+    offer = db.session.get(Offer, offer_id)
+    if offer is None:
+        return None
+    if offer.sender_id != buyer_id:
+        return None
+    if offer.acceptanceStatus != "accepted":
+        return None
+    if offer.redeemed:
+        return None
+
+    listing = db.session.get(Item, offer.listing_id)
+    if listing is None or not listing.buyable:
+        return None
+
+    return offer
 
 
 @dataclass(slots=True)
@@ -75,6 +97,9 @@ class OfferBoard:
     def seller_messages(self, listing_id: int) -> tuple[str, ...]:
         offers = self.history(listing_id)
         return tuple(f"{offer.buyer_display} offered {offer.amount_label}" for offer in offers)
+
+    def activity_feed(self, limit: int = 8) -> tuple[dict[str, object], ...]:
+        return tuple(self._activity_feed.entries[:limit])
 
     def _notify(self, event: OfferEvent) -> None:
         for observer in self._observers:
