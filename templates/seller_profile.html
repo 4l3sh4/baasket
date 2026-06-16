@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- ── Seller profile hero ──────────────────────────────────────────────── -->
+<section class="dashboard-hero card-surface reveal" data-reveal>
+  <div class="dashboard-profile">
+    <img src="{{ user.profile_image_url }}" alt="{{ user.username }} profile image" class="dashboard-avatar">
+    <div>
+      <p class="eyebrow">Seller storefront</p>
+      <h1>{{ user.username }}</h1>
+      <p>{{ user.bio or "No bio yet. Check out their listings!" }}</p>
+      <p class="muted-text">{{ user.email }}</p>
+      {% if current_user.is_authenticated and current_user.id != user.id %}
+        <form method="post" action="{{ url_for('seller_follow', user_id=user.id) }}" style="display:inline; margin-top:12px;">
+          <button type="submit" class="secondary-button">
+            {% if current_user.is_following(user) %}Unfollow{% else %}Follow{% endif %}
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="hero-stats dashboard-stats">
+    <article>
+      <strong>{{ listings | length }}</strong>
+      <span>active listings</span>
+    </article>
+    <article>
+      <strong>0</strong>
+      <span>offers received</span>
+    </article>
+    <article>
+      <strong>{{ reviews_count }}</strong>
+      <span>reviews received</span>
+    </article>
+    <article>
+      <strong>{{ user.created_at.strftime('%b %Y') }}</strong>
+      <span>member since</span>
+    </article>
+  </div>
+</section>
+
+<!-- ── Seller's listings ─────────────────────────────────────────────────── -->
+<section class="section-block">
+  <div class="section-heading">
+    <div>
+      <h2>{{ user.username }}'s listings</h2>
+      <p>Browse all items currently for sale from this seller.</p>
+    </div>
+  </div>
+
+  <div class="listing-grid thumbnail-grid">
+    {% for listing in listings %}
+      <article class="thumb-card reveal" data-reveal>
+        <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="thumb-image-wrap">
+          <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
+          <span class="badge {% if listing.buyer_id %}badge-sold{% else %}badge-available{% endif %}">
+            {% if listing.buyer_id %}Sold{% else %}Available{% endif %}
+          </span>
+        </a>
+        <div class="thumb-meta">
+          <h3 class="thumb-title"><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
+          <div class="thumb-price">{{ listing.price|money }}</div>
+        </div>
+      </article>
+    {% else %}
+      <div class="empty-state wide">This seller has not posted any items yet.</div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

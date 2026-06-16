@@ -1162,6 +1162,44 @@ def create_app() -> Flask:
 		flash("You have been signed out.", "info")
 		return redirect(url_for("index"))
 
+	@app.get("/seller/<int:user_id>")
+	def seller_profile(user_id: int) -> ResponseReturnValue:
+		user = db.session.get(User, user_id)
+		if user is None:
+			flash("That seller does not exist.", "warning")
+			return redirect(url_for("index"))
+
+		listings = Item.query.filter_by(seller_id=user_id).all()
+		reviews_count = 0
+
+		return render_template(
+			"seller_profile.html",
+			title=f"{user.username}'s Storefront | Baasket",
+			user=user,
+			listings=listings,
+			reviews_count=reviews_count,
+		)
+
+	@app.post("/seller/<int:user_id>/follow")
+	@login_required
+	def seller_follow(user_id: int) -> ResponseReturnValue:
+		user = db.session.get(User, user_id)
+		if user is None:
+			flash("That seller does not exist.", "warning")
+			return redirect(url_for("index"))
+		if user.id == current_user.id:
+			flash("You cannot follow yourself.", "warning")
+			return redirect(url_for("seller_profile", user_id=user_id))
+
+		if current_user.is_following(user):
+			current_user.unfollow(user)
+			flash(f"You unfollowed {user.username}.", "info")
+		else:
+			current_user.follow(user)
+			flash(f"You are now following {user.username}.", "success")
+		db.session.commit()
+		return redirect(url_for("seller_profile", user_id=user_id))
+
 	@app.route("/dashboard", methods=["GET", "POST"])
 	@login_required
 	def dashboard() -> ResponseReturnValue:
@@ -1177,6 +1215,8 @@ def create_app() -> Flask:
 					return redirect(url_for("dashboard"))
 				current_user.username = new_username
 			current_user.bio = request.form.get("bio", "").strip()
+			current_user.home_address = request.form.get("home_address", "").strip()
+			current_user.phone_number = request.form.get("phone_number", "").strip()
 			new_profile_image = _save_upload(request.files.get("profile_image"), PROFILE_UPLOAD_DIR)
 			if new_profile_image:
 				current_user.profile_image = new_profile_image
