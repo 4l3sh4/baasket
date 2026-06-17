@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
@@ -16,7 +16,7 @@ from typing import TypedDict
 
 from catalog import ListingFactory, _build_art, build_seeded_catalog
 from extensions import db, login_manager
-from models import Item, Notification, Offer, OrderItemModel, OrderModel, User, ChatSession, Message, Review
+from models import Item, ListingImage, Notification, Offer, OrderItemModel, OrderModel, User, ChatSession, Message, Review, Report
 from notifications import build_notification_subject
 from logistics_v2.flask_adapter import run_checkout_logistics_v2
 from offers import OfferBoard, get_redeemable_offer
@@ -253,9 +253,47 @@ def _save_upload(file_storage, folder: Path) -> str | None:
 	return f"uploads/{folder.name}/{unique_name}"
 
 
+def _save_uploads(file_storages, folder: Path, limit: int) -> list[str]:
+	"""Save up to `limit` uploaded files (skipping any with no filename) and
+	return their relative static paths, in the same order they were received."""
+	saved: list[str] = []
+	for file_storage in file_storages:
+		if len(saved) >= limit:
+			break
+		saved_path = _save_upload(file_storage, folder)
+		if saved_path:
+			saved.append(saved_path)
+	return saved
+
+
 def _money(value: object) -> str:
 	amount = Decimal(str(value))
 	return f"RM{amount:,.2f}"
+
+
+def _timeago(value: object) -> str:
+	"""Render a datetime as a relative 'x ago' string, e.g. for listing posted
+	times and review timestamps."""
+	if not isinstance(value, datetime):
+		return ""
+	delta = datetime.utcnow() - value
+	seconds = int(delta.total_seconds())
+	if seconds < 60:
+		return "moments ago"
+	minutes = seconds // 60
+	if minutes < 60:
+		return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+	hours = minutes // 60
+	if hours < 24:
+		return f"{hours} hour{'s' if hours != 1 else ''} ago"
+	days = hours // 24
+	if days < 30:
+		return f"{days} day{'s' if days != 1 else ''} ago"
+	months = days // 30
+	if months < 12:
+		return f"{months} month{'s' if months != 1 else ''} ago"
+	years = months // 12
+	return f"{years} year{'s' if years != 1 else ''} ago"
 
 
 class CartLine(TypedDict):
@@ -402,6 +440,63 @@ def _related_listings(listing: Item, limit: int = 3) -> list[Item]:
 	return results[:limit]
 
 
+def _seller_profile_stats(seller_id: int) -> dict[str, object]:
+	"""Stats shown on the 'Meet the seller' card. Everything here comes from
+	real rows (listings, orders, reviews) rather than placeholder numbers."""
+	seller = db.session.get(User, seller_id)
+	active_listings = Item.query.filter_by(seller_id=seller_id, buyer_id=None).count()
+	sales_count = (
+		OrderItemModel.query.join(Item, OrderItemModel.listing_id == Item.id)
+		.filter(Item.seller_id == seller_id)
+		.count()
+	)
+	reviews = Review.query.filter_by(seller_id=seller_id).all()
+	rating_count = len(reviews)
+	rating_avg = (sum(review.ratingValue for review in reviews) / rating_count) if rating_count else 0.0
+	return {
+		"seller": seller,
+		"active_listings": active_listings,
+		"sales_count": sales_count,
+		"rating_avg": rating_avg,
+		"rating_count": rating_count,
+		"member_since": seller.created_at.strftime("%b %Y") if seller else "",
+	}
+
+
+def _seller_reviews(seller_id: int, limit: int = 5) -> list[Review]:
+	return (
+		Review.query.filter_by(seller_id=seller_id)
+		.order_by(Review.created_at.desc())
+		.limit(limit)
+		.all()
+	)
+
+
+def _related_search_terms(listing: Item, limit: int = 8) -> list[dict[str, str]]:
+	"""Build a small set of taxonomy-derived search suggestions for the
+	'What others also search for' row. Baasket has no search-suggestion log
+	to draw from, so this leans on the category/subcategory tree instead of
+	inventing numbers."""
+	terms: list[dict[str, str]] = []
+	seen: set[str] = set()
+
+	def _add(label: str, sub: str = "") -> None:
+		key = label.casefold().strip()
+		if not key or key in seen:
+			return
+		seen.add(key)
+		terms.append({"label": label, "sub": sub})
+
+	if listing.subcategory:
+		_add(listing.subcategory, listing.subcategory)
+	for sibling in CATEGORIES_MAP.get(listing.category, []):
+		if len(terms) >= limit:
+			break
+		_add(sibling, sibling)
+	_add(listing.category)
+	return terms[:limit]
+
+
 def _listing_stats_for_user(user_id: int) -> dict[str, int]:
 	listings = Item.query.filter_by(seller_id=user_id).all()
 	offer_count = sum(len(listing.offers) for listing in listings)
@@ -465,6 +560,49 @@ def _seed_database() -> None:
 			listing.buyable = seed_listing.buyable
 			listing.reserved = seed_listing.reserved
 			db.session.add(listing)
+		db.session.flush()
+
+	# Seed a few reviews for the demo storefront so the seller + reviews
+	# sections on the listing page have real content. Reviews are keyed on
+	# seller_id, so a newly registered seller correctly starts with the
+	# "no reviews yet" empty state instead of fake numbers.
+	if demo_user is not None and Review.query.filter_by(seller_id=demo_user.id).count() == 0:
+		demo_reviewers = []
+		for username, email in (
+			("mei_ling87", "mei.ling@example.com"),
+			("arif_hassan", "arif.hassan@example.com"),
+			("teh_aiping", "teh.aiping@example.com"),
+		):
+			reviewer = User.query.filter_by(username=username).first()
+			if reviewer is None:
+				reviewer = User()
+				reviewer.username = username
+				reviewer.email = email
+				reviewer.bio = "Baasket shopper"
+				reviewer.set_password("baasket123")
+				db.session.add(reviewer)
+				db.session.flush()
+			demo_reviewers.append(reviewer)
+
+		demo_listings = Item.query.filter_by(seller_id=demo_user.id).order_by(Item.id).all()
+		seed_reviews = [
+			(5.0, "Item matched the photos exactly and the handover was quick.", 0, 2),
+			(4.5, "Good communication throughout, slightly late to the meetup but worth it.", 1, 10),
+			(5.0, "Second time buying from this seller \u2014 packaging was careful both times.", 2, 25),
+			(4.0, "Fair price and the listing description was accurate.", 0, 40),
+		]
+		for index, (rating, comment, reviewer_idx, days_ago) in enumerate(seed_reviews):
+			review = Review()
+			review.reviewID = uuid4().hex
+			review.ratingValue = rating
+			review.comment = comment
+			review.created_by = demo_reviewers[reviewer_idx % len(demo_reviewers)].id
+			review.seller_id = demo_user.id
+			if demo_listings:
+				review.listing_id = demo_listings[index % len(demo_listings)].id
+			review.created_at = datetime.utcnow() - timedelta(days=days_ago)
+			db.session.add(review)
+
 	db.session.commit()
 
 
@@ -486,6 +624,10 @@ def create_app() -> Flask:
 	@app.template_filter("money")
 	def money_filter(value: object) -> str:
 		return _money(value)
+
+	@app.template_filter("timeago")
+	def timeago_filter(value: object) -> str:
+		return _timeago(value)
 
 	@app.context_processor
 	def inject_globals() -> dict[str, object]:
@@ -511,7 +653,6 @@ def create_app() -> Flask:
 
 	with app.app_context():
 		db.create_all()
-		_seed_database()
 
 		# Ensure chat_session table has the new columns added to the model
 		def _ensure_chat_session_columns():
@@ -576,6 +717,11 @@ def create_app() -> Flask:
 					("is_read", "INTEGER DEFAULT 0"),
 					("related_id", "INTEGER"),
 				],
+				"review": [
+					("seller_id", "INTEGER"),
+					("listing_id", "INTEGER"),
+					("created_at", "TEXT"),
+				],
 			}
 
 			for table, cols in table_columns.items():
@@ -590,6 +736,11 @@ def create_app() -> Flask:
 							db.session.rollback()
 
 		_ensure_schema_columns()
+
+		# Seed demo data only after the schema is fully migrated, otherwise a
+		# pre-existing database (created before newer columns like
+		# review.seller_id existed) would fail here with "no such column".
+		_seed_database()
 
 	@app.get("/")
 	def index() -> ResponseReturnValue:
@@ -617,11 +768,16 @@ def create_app() -> Flask:
 			flash("That listing is no longer available.", "warning")
 			return redirect(url_for("index"))
 
+		seller_stats = _seller_profile_stats(listing.seller_id)
+
 		return render_template(
 			"listing.html",
 			title=f"{listing.title} | Baasket",
 			listing=listing,
-			related=_related_listings(listing, limit=3),
+			related=_related_listings(listing, limit=4),
+			seller_stats=seller_stats,
+			seller_reviews=_seller_reviews(listing.seller_id, limit=4),
+			search_terms=_related_search_terms(listing),
 		)
 
 	@app.post("/listing/<int:listing_id>/cart")
@@ -638,6 +794,28 @@ def create_app() -> Flask:
 		flash(f"{listing.title} was added to your basket.", "success")
 		return redirect(url_for("cart_view"))
 
+	@app.post("/listing/<int:listing_id>/report")
+	@login_required
+	def report_listing(listing_id: int):
+		listing = db.session.get(Item, listing_id)
+		if listing is None:
+			flash("That listing could not be found.", "warning")
+			return redirect(url_for("index"))
+
+		reason = request.form.get("reason", "").strip() or "Other"
+		details = request.form.get("details", "").strip()[:1000]
+
+		report = Report()
+		report.reportID = uuid4().hex
+		report.reason = reason
+		report.details = details
+		report.received_by = listing.seller_id
+		db.session.add(report)
+		db.session.commit()
+
+		flash("Thanks — your report has been sent to the Baasket team.", "success")
+		return redirect(url_for("listing_detail", listing_id=listing_id))
+
 	@app.route("/sell", methods=["GET", "POST"])
 	@login_required
 	def sell() -> ResponseReturnValue:
@@ -651,8 +829,6 @@ def create_app() -> Flask:
 			location = request.form.get("location", "").strip() or "Local pickup"
 			description = request.form.get("description", "").strip()[:1000]
 			buyable  = request.form.get("buyable",  "1") == "1"
-			image_path = _save_upload(request.files.get("image"), LISTING_UPLOAD_DIR)
-			seed_image_data = "" if image_path else _build_art(title[:24] or category[:24] or "Listing", "#1f6f78", "#e26d5c")
 
 			if not title or not category or not price_text or not description:
 				flash("Title, category, price, and description are required.", "warning")
@@ -672,6 +848,12 @@ def create_app() -> Flask:
 				flash("Enter a valid asking price.", "warning")
 				return redirect(url_for("sell"))
 
+			uploaded_files = [f for f in request.files.getlist("images") if getattr(f, "filename", "")]
+			if len(uploaded_files) > Item.MAX_IMAGES:
+				flash(f"You can upload up to {Item.MAX_IMAGES} images per listing — only the first {Item.MAX_IMAGES} were used.", "warning")
+			image_paths = _save_uploads(uploaded_files, LISTING_UPLOAD_DIR, Item.MAX_IMAGES)
+			seed_image_data = "" if image_paths else _build_art(title[:24] or category[:24] or "Listing", "#1f6f78", "#e26d5c")
+
 			listing = Item()
 			listing.seller_id = current_user.id
 			listing.title = title
@@ -681,10 +863,12 @@ def create_app() -> Flask:
 			listing.condition = condition
 			listing.location = location
 			listing.description = description
-			listing.image_path = image_path or ""
+			listing.image_path = ""
 			listing.seed_image_data = seed_image_data
 			listing.likes = 0
 			listing.buyable = buyable
+			for position, image_path in enumerate(image_paths):
+				listing.images.append(ListingImage(image_path=image_path, position=position))
 			db.session.add(listing)
 			db.session.commit()
 			flash("Your listing is now live on Baasket.", "success")
@@ -694,6 +878,7 @@ def create_app() -> Flask:
 			"sell.html",
 			title="Sell on Baasket",
 			categories_map=CATEGORIES_MAP,
+			max_images=Item.MAX_IMAGES,
 		)
 
 	@app.get("/cart")
@@ -1257,9 +1442,28 @@ def create_app() -> Flask:
 					flash("Enter a valid price.", "warning")
 					return redirect(url_for("edit_listing", listing_id=listing.id))
 
-			replacement_image = _save_upload(request.files.get("image"), LISTING_UPLOAD_DIR)
-			if replacement_image:
-				listing.image_path = replacement_image
+			# Existing images the seller chose to remove (checkboxes posted as
+			# "remove_image" with the ListingImage id as the value).
+			remove_ids = {int(value) for value in request.form.getlist("remove_image") if value.isdigit()}
+			remaining_images = [img for img in sorted(listing.images, key=lambda i: i.position) if img.id not in remove_ids]
+			for img in list(listing.images):
+				if img.id in remove_ids:
+					listing.images.remove(img)
+					db.session.delete(img)
+
+			new_files = [f for f in request.files.getlist("images") if getattr(f, "filename", "")]
+			available_slots = max(0, Item.MAX_IMAGES - len(remaining_images))
+			if len(new_files) > available_slots:
+				flash(f"A listing can have at most {Item.MAX_IMAGES} images — some new photos were not added.", "warning")
+			new_paths = _save_uploads(new_files, LISTING_UPLOAD_DIR, available_slots)
+
+			for position, img in enumerate(remaining_images):
+				img.position = position
+			next_position = len(remaining_images)
+			for offset, image_path in enumerate(new_paths):
+				listing.images.append(ListingImage(image_path=image_path, position=next_position + offset))
+
+			if listing.images:
 				listing.seed_image_data = ""
 
 			db.session.commit()
@@ -1271,6 +1475,7 @@ def create_app() -> Flask:
 			title="Edit Listing | Baasket",
 			listing=listing,
 			categories_map=CATEGORIES_MAP,
+			max_images=Item.MAX_IMAGES,
 		)
 
 	@app.post("/dashboard/listings/<int:listing_id>/delete")

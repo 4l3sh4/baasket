@@ -67,6 +67,10 @@ class ListingModel(db.Model):
     buyable  = db.Column(db.Boolean, nullable=False, default=True)            # BUYABLE  bool
 
     # ── Internal / legacy fields ──────────────────────────────────────────────
+    # image_path / seed_image_data are kept for backward compatibility with the
+    # seeded demo catalog (see catalog.py) and any listing created before the
+    # multi-image gallery existed. Once a listing has rows in `images`, those
+    # take priority — see image_data / gallery_images below.
     image_path     = db.Column(db.String(255), nullable=False, default="")
     seed_image_data = db.Column(db.Text,       nullable=False, default="")
     location       = db.Column(db.String(80),  nullable=False, default="")
@@ -78,6 +82,15 @@ class ListingModel(db.Model):
     created_at = db.synonym("listed_date")
 
     offers = db.relationship("Offer", backref="listing", lazy=True, cascade="all, delete-orphan")
+    images = db.relationship(
+        "ListingImage",
+        backref="listing",
+        lazy=True,
+        order_by="ListingImage.position",
+        cascade="all, delete-orphan",
+    )
+
+    MAX_IMAGES = 10
 
     @property
     def price_label(self) -> str:
@@ -89,6 +102,10 @@ class ListingModel(db.Model):
 
     @property
     def image_data(self) -> str:
+        """Cover photo — the first uploaded image, or a legacy/seeded fallback."""
+        ordered = sorted(self.images, key=lambda img: img.position) if self.images else []
+        if ordered:
+            return ordered[0].url
         if self.image_path:
             return f"/static/{self.image_path}"
         return self.seed_image_data or "/static/assets/logo/baasket_logo.png"
@@ -96,6 +113,36 @@ class ListingModel(db.Model):
     @property
     def offer_count(self) -> int:
         return len(self.offers)
+
+    @property
+    def gallery_images(self) -> tuple[str, ...]:
+        """All photos for this listing, cover first. Falls back to the single
+        legacy image (uploaded path or seeded artwork) when no rows exist in
+        `images`, so older/seeded listings still render correctly."""
+        ordered = sorted(self.images, key=lambda img: img.position) if self.images else []
+        if ordered:
+            return tuple(img.url for img in ordered)
+        return (self.image_data,)
+
+    @property
+    def posted_label(self) -> str:
+        return self.listed_date.strftime("%d %b %Y") if self.listed_date else ""
+
+
+class ListingImage(db.Model):
+    """One photo belonging to a listing. A listing can have up to
+    ListingModel.MAX_IMAGES of these; `position` controls display order,
+    with position 0 acting as the cover photo shown in cards/thumbnails."""
+    __tablename__ = "listing_image"
+    id = db.Column(db.Integer, primary_key=True)
+    listing_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=False, index=True)
+    image_path = db.Column(db.String(255), nullable=False)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    @property
+    def url(self) -> str:
+        return f"/static/{self.image_path}"
 
 
 class Offer(db.Model):
@@ -227,6 +274,17 @@ class Review(db.Model):
     comment = db.Column(db.String(500), nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
 
+    # The seller being reviewed, and (optionally) the listing the review is
+    # about. Both are nullable so existing rows created before this column
+    # existed keep working; the seller's review feed simply skips them.
+    seller_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
+    listing_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    reviewer = db.relationship("User", foreign_keys=[created_by])
+    seller = db.relationship("User", foreign_keys=[seller_id])
+    listing = db.relationship("ListingModel", foreign_keys=[listing_id])
+
     def addReview(self) -> bool:
         return True
 
@@ -234,6 +292,14 @@ class Review(db.Model):
         self.ratingValue = new_rating
         self.comment = new_comment
         return True
+
+    @property
+    def reviewer_name(self) -> str:
+        return self.reviewer.username if self.reviewer else "Baasket user"
+
+    @property
+    def full_stars(self) -> int:
+        return max(0, min(5, round(self.ratingValue)))
 
 
 class Report(db.Model):
