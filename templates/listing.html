@@ -195,7 +195,13 @@
     <article class="card-surface listing-block seller-block">
       <h2>Meet the seller</h2>
       <div class="seller-profile-row">
-        <img src="{{ listing.seller.profile_image_url if listing.seller else '/static/assets/logo/baasket_logo.png' }}" alt="{{ listing.seller_name }}" class="avatar-md">
+        {% if listing.seller %}
+          <a href="{{ url_for('user_profile', user_id=listing.seller.id) }}" class="avatar-link">
+            <img src="{{ listing.seller.profile_image_url }}" alt="{{ listing.seller_name }}" class="avatar-md">
+          </a>
+        {% else %}
+          <img src="/static/assets/logo/baasket_logo.png" alt="{{ listing.seller_name }}" class="avatar-md">
+        {% endif %}
         <div>
           <h3>{{ listing.seller_name }}</h3>
           <div class="rating-row">
@@ -252,7 +258,13 @@
           {% for review in seller_reviews %}
             <article class="review-card">
               <div class="review-head">
-                <img src="{{ review.reviewer.profile_image_url if review.reviewer else '/static/assets/logo/baasket_logo.png' }}" alt="" class="avatar-sm">
+                {% if review.reviewer %}
+                  <a href="{{ url_for('user_profile', user_id=review.reviewer.id) }}" class="avatar-link">
+                    <img src="{{ review.reviewer.profile_image_url }}" alt="{{ review.reviewer.username }}" class="avatar-sm">
+                  </a>
+                {% else %}
+                  <img src="/static/assets/logo/baasket_logo.png" alt="" class="avatar-sm">
+                {% endif %}
                 <div>
                   <strong>{{ review.reviewer_name }}</strong>
                   <p class="review-meta">{{ review.created_at|timeago }}</p>
@@ -274,7 +286,13 @@
   <aside class="listing-buy-col">
     <div class="buy-card card-surface">
       <div class="buy-card-seller-row">
-        <img src="{{ listing.seller.profile_image_url if listing.seller else '/static/assets/logo/baasket_logo.png' }}" alt="{{ listing.seller_name }}" class="avatar-sm">
+        {% if listing.seller %}
+          <a href="{{ url_for('user_profile', user_id=listing.seller.id) }}" class="avatar-link">
+            <img src="{{ listing.seller.profile_image_url }}" alt="{{ listing.seller_name }}" class="avatar-sm">
+          </a>
+        {% else %}
+          <img src="/static/assets/logo/baasket_logo.png" alt="{{ listing.seller_name }}" class="avatar-sm">
+        {% endif %}
         <div>
           <strong>{{ listing.seller_name }}</strong>
           <div class="rating-row">
@@ -365,7 +383,13 @@
         </div>
         <div class="product-copy">
           <div class="product-seller-row">
-            <img src="{{ item.seller.profile_image_url if item.seller else '/static/assets/logo/baasket_logo.png' }}" alt="" class="avatar-xs">
+            {% if item.seller %}
+              <a href="{{ url_for('user_profile', user_id=item.seller.id) }}" class="avatar-link">
+                <img src="{{ item.seller.profile_image_url }}" alt="{{ item.seller_name }}" class="avatar-xs">
+              </a>
+            {% else %}
+              <img src="/static/assets/logo/baasket_logo.png" alt="" class="avatar-xs">
+            {% endif %}
             <span>{{ item.seller_name }}</span>
             <span class="dot-sep">&middot;</span>
             <span>{{ item.listed_date|timeago }}</span>

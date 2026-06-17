@@ -14,7 +14,7 @@ from sqlalchemy import or_, text
 from werkzeug.utils import secure_filename
 from typing import TypedDict
 
-from catalog import ListingFactory, _build_art, build_seeded_catalog
+from catalog import _build_art
 from extensions import db, login_manager
 from models import Item, Like, ListingImage, Notification, Offer, OrderItemModel, OrderModel, User, ChatSession, Message, Review, ReviewImage, Report
 from notifications import build_notification_subject
@@ -378,37 +378,37 @@ def _mark_listings_sold(lines: list[OrderLine], buyer_id: int) -> None:
 		listing.buyable = False
 
 
-def _recent_offer_activity(limit: int = 8) -> list[dict[str, object]]:
-	entries: list[dict[str, object]] = []
-	for offer in Offer.query.order_by(Offer.created_at.desc()).limit(limit).all():
-		listing = db.session.get(Item, offer.listing_id)
-		title = listing.title if listing else "an item"
-		entries.append({
-			"headline": f"Offer on {title}",
-			"detail": f"{offer.buyer_display} submitted {offer.amount_label}.",
-		})
-	return entries
-
-
 def _create_cart_lines() -> tuple[list[CartLine], Decimal]:
-	cart_ids = [int(listing_id) for listing_id in session.get("cart", [])]
+	raw_ids = session.get("cart", [])
+	cart_ids = [int(listing_id) for listing_id in raw_ids]
 	counts = Counter(cart_ids)
 	lines: list[CartLine] = []
 	subtotal = Decimal("0.00")
+	sellable_ids: set[int] = set()
 
 	for listing_id, quantity in counts.items():
 		listing = db.session.get(Item, listing_id)
-		if listing is None:
+		if listing is None or listing.buyer_id is not None:
+			# Missing or already-sold listings are dropped from the basket
+			# instead of being shown or charged for.
 			continue
+		sellable_ids.add(listing_id)
 		line_total = Decimal(listing.price) * quantity
 		subtotal += line_total
 		lines.append({"listing": listing, "quantity": quantity, "line_total": line_total})
+
+	# Keep the session cart in sync so the basket badge/count and any later
+	# checkout attempt never reference a listing that's no longer available.
+	cleaned_ids = [listing_id for listing_id in cart_ids if listing_id in sellable_ids]
+	if cleaned_ids != cart_ids:
+		session["cart"] = cleaned_ids
+		session.modified = True
 
 	return lines, subtotal
 
 
 def _search_listings(search: str = "", category: str = "") -> list[Item]:
-	query = Item.query
+	query = Item.query.filter(Item.buyer_id.is_(None))
 	if category:
 		query = query.filter(Item.category == category)
 	if search:
@@ -427,7 +427,8 @@ def _search_listings(search: str = "", category: str = "") -> list[Item]:
 
 def _featured_listings(limit: int = 4) -> list[Item]:
 	return (
-		Item.query.order_by(Item.created_at.desc())
+		Item.query.filter(Item.buyer_id.is_(None))
+		.order_by(Item.created_at.desc())
 		.limit(limit)
 		.all()
 	)
@@ -571,31 +572,8 @@ def _seed_database() -> None:
 	else:
 		demo_user = User.query.filter_by(username="baasket").first() or User.query.first()
 
-	# Keep demo catalog listings alongside real user listings.
-	if demo_user is not None:
-		existing_titles = {
-			listing.title
-			for listing in Item.query.filter_by(seller_id=demo_user.id).all()
-		}
-		seed_repository = build_seeded_catalog(ListingFactory())
-		for seed_listing in seed_repository.all():
-			if seed_listing.title in existing_titles:
-				continue
-			listing = Item()
-			listing.seller_id = demo_user.id
-			listing.title = seed_listing.title
-			listing.category = seed_listing.category
-			listing.subcategory = seed_listing.subcategory_id
-			listing.price = float(seed_listing.price)
-			listing.condition = seed_listing.condition
-			listing.location = seed_listing.location or "Local pickup"
-			listing.description = seed_listing.description
-			listing.image_path = ""
-			listing.seed_image_data = seed_listing.image_data
-			listing.buyable = seed_listing.buyable
-			listing.reserved = seed_listing.reserved
-			db.session.add(listing)
-		db.session.flush()
+	# Demo catalog listings are intentionally not generated here — the
+	# database starts with no listings beyond whatever real users create.
 
 	# Seed a few reviews for the demo storefront so the seller + reviews
 	# sections on the listing page have real content. Reviews are keyed on
@@ -788,11 +766,9 @@ def create_app() -> Flask:
 			search=search,
 			category=category,
 			listings=listings,
-			featured=_featured_listings(limit=4),
+			featured=_featured_listings(limit=1),
 			categories=list(CATEGORIES_MAP.keys()),
-			listing_count=Item.query.count(),
 			category_list=_build_category_list(),
-			activity_feed=_recent_offer_activity(),
 		)
 
 	@app.get("/listing/<int:listing_id>")
@@ -873,6 +849,34 @@ def create_app() -> Flask:
 
 		flash("Thanks — your report has been sent to the Baasket team.", "success")
 		return redirect(url_for("listing_detail", listing_id=listing_id))
+
+	@app.get("/users/<int:user_id>")
+	def user_profile(user_id: int) -> ResponseReturnValue:
+		"""Public profile for any user — reachable by clicking their profile
+		picture anywhere on the site. Shows their star rating, the reviews
+		they've received, and their current (unsold) listings. This is
+		read-only and separate from /dashboard, which stays private to the
+		logged-in account it belongs to."""
+		profile_user = db.session.get(User, user_id)
+		if profile_user is None:
+			flash("That user could not be found.", "warning")
+			return redirect(url_for("index"))
+
+		current_listings = (
+			Item.query.filter_by(seller_id=profile_user.id, buyer_id=None)
+			.order_by(Item.created_at.desc())
+			.all()
+		)
+
+		return render_template(
+			"user_profile.html",
+			title=f"{profile_user.username} | Baasket",
+			profile_user=profile_user,
+			is_own_profile=current_user.is_authenticated and current_user.id == profile_user.id,
+			seller_stats=_seller_profile_stats(profile_user.id),
+			seller_reviews=_seller_reviews(profile_user.id, limit=20),
+			listings=current_listings,
+		)
 
 	@app.route("/sell", methods=["GET", "POST"])
 	@login_required
@@ -1435,8 +1439,19 @@ def create_app() -> Flask:
 		)
 		sales_history = _sales_history_for_user(current_user.id)
 		stats = _listing_stats_for_user(current_user.id)
-		# Total reviews received by the current user
-		reviews_count = Review.query.filter_by(created_by=current_user.id).count()
+		# Reviews other people have left on this user's listings (as a seller)
+		reviews_received = (
+			Review.query.filter_by(seller_id=current_user.id)
+			.order_by(Review.created_at.desc())
+			.all()
+		)
+		# Reviews this user has left on their own purchases (as a buyer)
+		reviews_made = (
+			Review.query.filter_by(created_by=current_user.id)
+			.order_by(Review.created_at.desc())
+			.all()
+		)
+		reviews_count = len(reviews_received)
 		liked_listings = _liked_listings_for_user(current_user.id)
 		return render_template(
 			"dashboard.html",
@@ -1445,6 +1460,8 @@ def create_app() -> Flask:
 			sales_history=sales_history,
 			stats=stats,
 			reviews_count=reviews_count,
+			reviews_received=reviews_received,
+			reviews_made=reviews_made,
 			liked_listings=liked_listings,
 			category_list=_build_category_list(),
 		)
@@ -1587,7 +1604,7 @@ def create_app() -> Flask:
 			price_max = None
 
 		# Build query
-		query = Item.query.filter(Item.category == category)
+		query = Item.query.filter(Item.category == category, Item.buyer_id.is_(None))
 		if selected_sub:
 			query = query.filter(Item.subcategory == selected_sub)
 		if selected_condition:

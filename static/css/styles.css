@@ -230,7 +230,8 @@ h3 {
 .detail-description,
 .panel-note p,
 .feed-item p,
-.empty-state {
+.empty-state,
+.hero-card-description {
   color: var(--muted);
   line-height: 1.6;
 }
@@ -377,6 +378,10 @@ h3 {
   margin-bottom: 18px;
 }
 
+.hero-image-wrap {
+  position: relative;
+}
+
 .hero-card h2 {
   margin-bottom: 8px;
   font-size: 1.8rem;
@@ -471,6 +476,10 @@ h3 {
 }
 
 .product-meta {
+  margin: 0 0 16px;
+}
+
+.hero-card-description {
   margin: 0 0 16px;
 }
 
@@ -2757,6 +2766,23 @@ h3 {
   background: rgba(255, 255, 255, 0.75);
   border: 1px solid rgba(21, 32, 43, 0.1);
   flex: none;
+}
+
+.avatar-link {
+  display: inline-flex;
+  flex: none;
+  border-radius: 50%;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.avatar-link:hover,
+.avatar-link:focus-visible {
+  opacity: 0.85;
+  transform: translateY(-1px);
+}
+
+.avatar-link img {
+  cursor: pointer;
 }
 
 .avatar-xs {

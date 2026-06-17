@@ -4,7 +4,9 @@
 <!-- ── Seller dashboard hero ─────────────────────────────────────────────── -->
 <section class="dashboard-hero card-surface reveal" data-reveal>
   <div class="dashboard-profile">
-    <img src="{{ current_user.profile_image_url }}" alt="{{ current_user.username }} profile image" class="dashboard-avatar">
+    <a href="{{ url_for('user_profile', user_id=current_user.id) }}" class="avatar-link">
+      <img src="{{ current_user.profile_image_url }}" alt="{{ current_user.username }} profile image" class="dashboard-avatar">
+    </a>
     <div>
       <p class="eyebrow">Seller dashboard</p>
       <h1>{{ current_user.username }}</h1>
@@ -120,6 +122,102 @@
       </article>
     {% else %}
       <div class="empty-state wide">You have not posted any items yet.</div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ── Reviews you've received ───────────────────────────────────────────── -->
+<section class="section-block">
+  <div class="section-heading">
+    <div>
+      <h2>Reviews you&rsquo;ve received</h2>
+      <p>Feedback buyers left after purchasing your listings.</p>
+    </div>
+  </div>
+
+  <div class="reviews-list">
+    {% for review in reviews_received %}
+      <article class="review-card">
+        <div class="review-head">
+          {% if review.reviewer %}
+            <a href="{{ url_for('user_profile', user_id=review.reviewer.id) }}" class="avatar-link">
+              <img src="{{ review.reviewer.profile_image_url }}" alt="{{ review.reviewer.username }}" class="avatar-sm">
+            </a>
+          {% else %}
+            <img src="/static/assets/logo/baasket_logo.png" alt="" class="avatar-sm">
+          {% endif %}
+          <div>
+            <strong>{{ review.reviewer_name }}</strong>
+            <p class="review-meta">{{ review.created_at|timeago }}</p>
+          </div>
+        </div>
+        <span class="stars" aria-hidden="true">{% for i in range(5) %}<span class="star{% if i < review.full_stars %} is-filled{% endif %}">&#9733;</span>{% endfor %}</span>
+        {% if review.comment %}<p class="review-comment">{{ review.comment }}</p>{% endif %}
+        {% if review.image_urls %}
+          <div class="review-photos-grid">
+            {% for url in review.image_urls %}
+              <a href="{{ url }}" target="_blank" rel="noopener" class="review-photo-cell">
+                <img src="{{ url }}" alt="Review photo">
+              </a>
+            {% endfor %}
+          </div>
+        {% endif %}
+        {% if review.listing %}
+          <p class="review-item-tag">
+            On: <a href="{{ url_for('listing_detail', listing_id=review.listing.id) }}">{{ review.listing.title }}</a>
+          </p>
+        {% endif %}
+      </article>
+    {% else %}
+      <div class="empty-state wide">No reviews yet &mdash; they&rsquo;ll show up here once buyers review your listings.</div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ── Reviews you've made ───────────────────────────────────────────────── -->
+<section class="section-block">
+  <div class="section-heading">
+    <div>
+      <h2>Reviews you&rsquo;ve made</h2>
+      <p>Feedback you&rsquo;ve left for sellers after a purchase.</p>
+    </div>
+  </div>
+
+  <div class="reviews-list">
+    {% for review in reviews_made %}
+      <article class="review-card review-card--own">
+        <div class="review-head">
+          {% if review.seller %}
+            <a href="{{ url_for('user_profile', user_id=review.seller.id) }}" class="avatar-link">
+              <img src="{{ review.seller.profile_image_url }}" alt="{{ review.seller.username }}" class="avatar-sm">
+            </a>
+          {% else %}
+            <img src="/static/assets/logo/baasket_logo.png" alt="" class="avatar-sm">
+          {% endif %}
+          <div>
+            <strong>{{ review.seller.username if review.seller else "Baasket seller" }}</strong>
+            <p class="review-meta">{{ review.created_at|timeago }}</p>
+          </div>
+        </div>
+        <span class="stars" aria-hidden="true">{% for i in range(5) %}<span class="star{% if i < review.full_stars %} is-filled{% endif %}">&#9733;</span>{% endfor %}</span>
+        {% if review.comment %}<p class="review-comment">{{ review.comment }}</p>{% endif %}
+        {% if review.image_urls %}
+          <div class="review-photos-grid">
+            {% for url in review.image_urls %}
+              <a href="{{ url }}" target="_blank" rel="noopener" class="review-photo-cell">
+                <img src="{{ url }}" alt="Review photo">
+              </a>
+            {% endfor %}
+          </div>
+        {% endif %}
+        {% if review.listing %}
+          <p class="review-item-tag">
+            On: <a href="{{ url_for('listing_detail', listing_id=review.listing.id) }}">{{ review.listing.title }}</a>
+          </p>
+        {% endif %}
+      </article>
+    {% else %}
+      <div class="empty-state wide">You haven&rsquo;t left any reviews yet &mdash; reviews you submit on delivered orders will show up here.</div>
     {% endfor %}
   </div>
 </section>

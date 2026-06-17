@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Baasket.LogisticsV2")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+104c2824fac1107d90a4a611dabc96bbbf818a9f")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+cea2d7fae7d4afeb19d4bc16007a03000221d8ca")]
 [assembly: System.Reflection.AssemblyProductAttribute("Baasket.LogisticsV2")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Baasket.LogisticsV2")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
