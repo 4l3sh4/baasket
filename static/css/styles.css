@@ -1328,7 +1328,7 @@ h3 {
 }
 
 .amount-input-wrap input {
-  padding-left: 30px !important;
+  padding-left: 36px !important;
 }
 
 .offer-submit-btn {
@@ -1658,7 +1658,7 @@ h3 {
 }
 
 .price-input-wrap input {
-  padding-left: 36px !important;
+  padding-left: 42px !important;
 }
 
 /* Field hints (e.g. "optional") */
@@ -2383,6 +2383,20 @@ h3 {
   border: 1px solid var(--line);
 }
 
+.order-item-row--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+
+.order-item-row__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+
 .order-item-row__info h3 {
   margin: 0 0 4px;
   font-size: 0.95rem;
@@ -2431,6 +2445,12 @@ h3 {
   .order-item-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .order-item-row__top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
 
   .order-item-row__meta {
@@ -2818,6 +2838,82 @@ h3 {
   font-size: 0.8rem;
   font-weight: 700;
   color: var(--accent-deep);
+}
+
+/* ── Leave-a-review (order detail page) ─────────────────────────────────── */
+.order-item-review {
+  width: 100%;
+}
+
+.review-open-button {
+  width: 100%;
+  justify-content: center;
+}
+
+.review-form-panel {
+  margin-top: 12px;
+  padding: 18px;
+}
+
+.review-form-panel h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+}
+
+.star-input {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.star-input__star {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1.6rem;
+  line-height: 1;
+  padding: 0;
+  color: rgba(21, 32, 43, 0.18);
+  transition: color 0.15s ease, transform 0.1s ease;
+}
+
+.star-input__star:hover {
+  transform: scale(1.08);
+}
+
+.star-input__star.is-filled {
+  color: #e6a23c;
+}
+
+.review-file-drop-zone {
+  padding: 18px 16px;
+}
+
+.review-card--own {
+  background: rgba(226, 109, 92, 0.06);
+  border-color: rgba(226, 109, 92, 0.22);
+}
+
+.review-photos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+  max-width: 360px;
+}
+
+.review-photo-cell {
+  display: block;
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.review-photo-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .listing-buy-col {

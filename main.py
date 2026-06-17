@@ -16,7 +16,7 @@ from typing import TypedDict
 
 from catalog import ListingFactory, _build_art, build_seeded_catalog
 from extensions import db, login_manager
-from models import Item, Like, ListingImage, Notification, Offer, OrderItemModel, OrderModel, User, ChatSession, Message, Review, Report
+from models import Item, Like, ListingImage, Notification, Offer, OrderItemModel, OrderModel, User, ChatSession, Message, Review, ReviewImage, Report
 from notifications import build_notification_subject
 from logistics_v2.flask_adapter import run_checkout_logistics_v2
 from offers import OfferBoard, get_redeemable_offer
@@ -27,6 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent
 INSTANCE_DIR = BASE_DIR / "instance"
 LISTING_UPLOAD_DIR = BASE_DIR / "static" / "uploads" / "listings"
 PROFILE_UPLOAD_DIR = BASE_DIR / "static" / "uploads" / "pfp"
+REVIEW_UPLOAD_DIR = BASE_DIR / "static" / "uploads" / "reviews"
 
 # ── Category / subcategory taxonomy ──────────────────────────────────────────
 CATEGORIES_MAP: dict[str, list[str]] = {
@@ -239,6 +240,7 @@ def _ensure_storage() -> None:
 	INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
 	LISTING_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 	PROFILE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+	REVIEW_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _save_upload(file_storage, folder: Path) -> str | None:
@@ -326,9 +328,11 @@ def _persist_order(
 	receipt: PaymentReceipt,
 	note: str,
 	lines: list[OrderLine],
+	buyer_id: int | None = None,
 	offer_id: int | None = None,
 ) -> OrderModel:
 	order = OrderModel()
+	order.buyer_id = buyer_id
 	order.buyer_name = buyer_name
 	order.buyer_email = buyer_email
 	order.payment_method = receipt.strategy_code
@@ -982,6 +986,7 @@ def create_app() -> Flask:
 			receipt=receipt,
 			note=note,
 			lines=order_lines,
+			buyer_id=current_user.id,
 		)
 		_mark_listings_sold(order_lines, current_user.id)
 		db.session.commit()
@@ -1079,6 +1084,7 @@ def create_app() -> Flask:
 			receipt=receipt,
 			note=note,
 			lines=order_lines,
+			buyer_id=current_user.id,
 			offer_id=offer.id,
 		)
 		_mark_listings_sold(order_lines, current_user.id)
@@ -1641,7 +1647,23 @@ def create_app() -> Flask:
 		if order is None:
 			flash('Order not found', 'warning')
 			return redirect(url_for('index'))
-		return render_template('order_detail.html', order=order, title='Order Details')
+		if order.buyer_id is not None and order.buyer_id != current_user.id:
+			flash('You can only view your own orders.', 'warning')
+			return redirect(url_for('index'))
+
+		order_item_ids = [item.id for item in order.items]
+		reviews_by_item = {
+			review.order_item_id: review
+			for review in Review.query.filter(Review.order_item_id.in_(order_item_ids)).all()
+		} if order_item_ids else {}
+
+		return render_template(
+			'order_detail.html',
+			order=order,
+			title='Order Details',
+			reviews_by_item=reviews_by_item,
+			review_max_images=Review.MAX_IMAGES,
+		)
 
 
 	@app.get('/orders/<int:order_id>/status')
@@ -1655,6 +1677,59 @@ def create_app() -> Flask:
 			'tracking_status': order.tracking_status,
 			'tracking_updated_at': order.tracking_updated_at.isoformat() if order.tracking_updated_at else None,
 		}
+
+	@app.post('/orders/<int:order_id>/items/<int:order_item_id>/review')
+	@login_required
+	def submit_review(order_id: int, order_item_id: int) -> ResponseReturnValue:
+		order = db.session.get(OrderModel, order_id)
+		if order is None:
+			flash('Order not found.', 'warning')
+			return redirect(url_for('index'))
+		if order.buyer_id is not None and order.buyer_id != current_user.id:
+			flash('You can only review your own orders.', 'warning')
+			return redirect(url_for('index'))
+		if order.tracking_status != 'delivered':
+			flash('You can leave a review once this order has been delivered.', 'warning')
+			return redirect(url_for('order_detail', order_id=order_id))
+
+		order_item = db.session.get(OrderItemModel, order_item_id)
+		if order_item is None or order_item.order_id != order.id:
+			flash('That item could not be found on this order.', 'warning')
+			return redirect(url_for('order_detail', order_id=order_id))
+
+		if Review.query.filter_by(order_item_id=order_item.id).first() is not None:
+			flash('You have already reviewed this item.', 'info')
+			return redirect(url_for('order_detail', order_id=order_id))
+
+		try:
+			rating = float(request.form.get('rating', ''))
+		except ValueError:
+			rating = 0.0
+		rating = max(1, min(5, round(rating)))
+		comment = request.form.get('comment', '').strip()[:500]
+
+		listing = db.session.get(Item, order_item.listing_id)
+		uploaded_files = [f for f in request.files.getlist('images') if getattr(f, 'filename', '')]
+		if len(uploaded_files) > Review.MAX_IMAGES:
+			flash(f'You can attach up to {Review.MAX_IMAGES} photos per review — only the first {Review.MAX_IMAGES} were used.', 'warning')
+		image_paths = _save_uploads(uploaded_files, REVIEW_UPLOAD_DIR, Review.MAX_IMAGES)
+
+		review = Review()
+		review.reviewID = uuid4().hex
+		review.ratingValue = rating
+		review.comment = comment
+		review.created_by = current_user.id
+		review.seller_id = listing.seller_id if listing else None
+		review.listing_id = listing.id if listing else None
+		review.order_id = order.id
+		review.order_item_id = order_item.id
+		for position, image_path in enumerate(image_paths):
+			review.images.append(ReviewImage(image_path=image_path, position=position))
+		db.session.add(review)
+		db.session.commit()
+
+		flash('Thanks for your review!', 'success')
+		return redirect(url_for('order_detail', order_id=order_id))
 
 	return app
 

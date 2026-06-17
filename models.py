@@ -210,6 +210,7 @@ class Offer(db.Model):
 
 class OrderModel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    buyer_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
     buyer_name = db.Column(db.String(80), nullable=False)
     buyer_email = db.Column(db.String(120), nullable=False, default="")
     payment_method = db.Column(db.String(40), nullable=False)
@@ -320,9 +321,26 @@ class Review(db.Model):
     listing_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
 
+    # Ties a review to the specific purchase it was left for. order_item_id
+    # is what the "leave a review" button on the order page is keyed on, so
+    # a buyer gets exactly one review per purchased item.
+    order_id = db.Column(db.Integer, db.ForeignKey("order_model.id"), nullable=True, index=True)
+    order_item_id = db.Column(db.Integer, db.ForeignKey("order_item_model.id"), nullable=True, index=True, unique=True)
+
     reviewer = db.relationship("User", foreign_keys=[created_by])
     seller = db.relationship("User", foreign_keys=[seller_id])
     listing = db.relationship("ListingModel", foreign_keys=[listing_id])
+    order = db.relationship("OrderModel", foreign_keys=[order_id])
+    order_item = db.relationship("OrderItemModel", foreign_keys=[order_item_id])
+    images = db.relationship(
+        "ReviewImage",
+        backref="review",
+        lazy=True,
+        order_by="ReviewImage.position",
+        cascade="all, delete-orphan",
+    )
+
+    MAX_IMAGES = 5
 
     def addReview(self) -> bool:
         return True
@@ -339,6 +357,26 @@ class Review(db.Model):
     @property
     def full_stars(self) -> int:
         return max(0, min(5, round(self.ratingValue)))
+
+    @property
+    def image_urls(self) -> tuple[str, ...]:
+        ordered = sorted(self.images, key=lambda img: img.position) if self.images else []
+        return tuple(img.url for img in ordered)
+
+
+class ReviewImage(db.Model):
+    """One photo attached to a review. A review can have up to
+    Review.MAX_IMAGES of these; `position` controls display order."""
+    __tablename__ = "review_image"
+    id = db.Column(db.Integer, primary_key=True)
+    review_id = db.Column(db.String(36), db.ForeignKey("review.reviewID"), nullable=False, index=True)
+    image_path = db.Column(db.String(255), nullable=False)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    @property
+    def url(self) -> str:
+        return f"/static/{self.image_path}"
 
 
 class Report(db.Model):
