@@ -1,6 +1,6 @@
 ============================================================
   Baasket — Observer Pattern Demo (Live Database)
-  Run at: 2026-06-17 00:15:45
+  Run at: 2026-06-18 00:14:29
 ============================================================
 
 [INFO] Using buyer  → id=1  username=baasket
@@ -10,7 +10,7 @@
   [attach] BuyerNotificationObserver registered.
   [attach] SellerNotificationObserver registered.
 
-[INFO] Notifications in database before demo: 25
+[INFO] Notifications in database before demo: 29
 
 [STEP 2] Firing event: offer_accepted
   → db.session.commit() — notifications saved to baasket.db
@@ -21,17 +21,17 @@
 [STEP 4] Firing event: purchase
   → db.session.commit() — notification saved to baasket.db
 
-[INFO] Notifications in database after demo: 29
+[INFO] Notifications in database after demo: 33
 [INFO] New notifications created: 4
 
 [RESULT] New notifications written to baasket.db:
-  id=26 | user_id=1 | category=offer_accepted
+  id=30 | user_id=1 | category=offer_accepted
          message: Your offer of RM140.00 on "Smart Watch Series" was accepted!
-  id=27 | user_id=2 | category=offer_accepted
+  id=31 | user_id=2 | category=offer_accepted
          message: You accepted an offer of RM140.00 on "Smart Watch Series".
-  id=28 | user_id=1 | category=offer_declined
+  id=32 | user_id=1 | category=offer_declined
          message: Your offer of RM90.00 on "Vintage Camera" was declined.
-  id=29 | user_id=2 | category=purchase
+  id=33 | user_id=2 | category=purchase
          message: Your listing "Smart Watch Series" was purchased!
 
 ============================================================
