@@ -26,6 +26,7 @@ class User(db.Model, UserMixin):
     phone_number = db.Column(db.String(40), nullable=True, default="")
     country = db.Column(db.String(80), nullable=True, default="")
     last_seen = db.Column(db.DateTime, nullable=True)
+    role = db.Column(db.String(20), nullable=False, default="user", server_default="user")
 
     listings = db.relationship("ListingModel", foreign_keys="[ListingModel.seller_id]", backref="seller", lazy=True, cascade="all, delete-orphan")
 
@@ -40,6 +41,10 @@ class User(db.Model, UserMixin):
         if self.profile_image:
             return f"/static/{self.profile_image}"
         return "/static/assets/logo/baasket_logo.png"
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role == "admin"
 
 
 class ListingModel(db.Model):
@@ -386,9 +391,23 @@ class Report(db.Model):
     details = db.Column(db.Text, nullable=True)
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     received_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    reporter_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    listing_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=True)
+
+    reporter = db.relationship("User", foreign_keys=[reporter_id])
+    recipient = db.relationship("User", foreign_keys=[received_by])
+    listing = db.relationship("ListingModel", foreign_keys=[listing_id])
 
     def createReport(self) -> bool:
         return True
+
+    @property
+    def reporter_name(self) -> str:
+        return self.reporter.username if self.reporter else "Unknown user"
+
+    @property
+    def listing_title(self) -> str:
+        return self.listing.title if self.listing else "Listing no longer available"
 
 
 class Cart(db.Model):

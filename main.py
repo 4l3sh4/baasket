@@ -567,6 +567,7 @@ def _seed_database() -> None:
 		demo_user.email = "hello@baasket.local"
 		demo_user.bio = "Baasket demo storefront"
 		demo_user.set_password("baasket123")
+		demo_user.role = "user"
 		db.session.add(demo_user)
 		db.session.flush()
 	else:
@@ -699,6 +700,7 @@ def create_app() -> Flask:
 					("phone_number", "TEXT"),
 					("country", "TEXT"),
 					("last_seen", "TEXT"),
+					("role", "TEXT DEFAULT 'user'"),
 				],
 				"listing_model": [
 					("quantity", "INTEGER"),
@@ -733,6 +735,10 @@ def create_app() -> Flask:
 					("seller_id", "INTEGER"),
 					("listing_id", "INTEGER"),
 					("created_at", "TEXT"),
+				],
+				"report": [
+					("reporter_id", "INTEGER"),
+					("listing_id", "INTEGER"),
 				],
 			}
 
@@ -839,11 +845,15 @@ def create_app() -> Flask:
 		reason = request.form.get("reason", "").strip() or "Other"
 		details = request.form.get("details", "").strip()[:1000]
 
+		admin = User.query.filter_by(role="admin").first()
+
 		report = Report()
 		report.reportID = uuid4().hex
 		report.reason = reason
 		report.details = details
-		report.received_by = listing.seller_id
+		report.received_by = admin.id if admin else None
+		report.reporter_id = current_user.id
+		report.listing_id = listing.id
 		db.session.add(report)
 		db.session.commit()
 
@@ -1378,10 +1388,20 @@ def create_app() -> Flask:
 			user.bio = bio
 			user.profile_image = profile_image or ""
 			user.set_password(password)
+			# The very first real account on the site automatically becomes the
+			# admin. The seeded demo "baasket" account (created on first app
+			# startup, see _seed_database) is deliberately excluded from this
+			# check, so admin status goes to the first person who actually signs
+			# up rather than the demo storefront.
+			if User.query.filter_by(role="admin").first() is None:
+				user.role = "admin"
 			db.session.add(user)
 			db.session.commit()
 			login_user(user)
-			flash("Welcome to Baasket.", "success")
+			if user.is_admin:
+				flash("Welcome to Baasket. You're the first account, so you've been made an admin.", "success")
+			else:
+				flash("Welcome to Baasket.", "success")
 			return redirect(url_for("dashboard"))
 
 		return render_template("register.html", title="Create Account | Baasket")
@@ -1663,6 +1683,24 @@ def create_app() -> Flask:
 			"notifications.html",
 			title="Notifications | Baasket",
 			notifications=notifs,
+		)
+
+	@app.get("/admin/reports")
+	@login_required
+	def admin_reports() -> ResponseReturnValue:
+		if not current_user.is_admin:
+			flash("That page is only available to admins.", "warning")
+			return redirect(url_for("index"))
+
+		reports = (
+			Report.query.filter_by(received_by=current_user.id)
+			.order_by(Report.timestamp.desc())
+			.all()
+		)
+		return render_template(
+			"admin_reports.html",
+			title="Reports | Baasket",
+			reports=reports,
 		)
 
 

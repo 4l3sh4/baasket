@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="section-block">
+
+  <div class="section-heading">
+    <div>
+      <h2>Reports</h2>
+      <p>Listings that shoppers have flagged, sent to your admin inbox.</p>
+    </div>
+  </div>
+
+  {% if reports %}
+    <div class="inbox-list">
+      {% for report in reports %}
+        <div class="inbox-row card-surface" style="cursor:default;">
+
+          <div class="inbox-thumb-wrap">
+            <div class="inbox-thumb inbox-thumb--placeholder" style="font-size:1.4rem;">🚩</div>
+          </div>
+
+          <div class="inbox-body">
+            <div class="inbox-top">
+              <span class="inbox-other">
+                {% if report.listing %}
+                  <a href="{{ url_for('listing_detail', listing_id=report.listing_id) }}">{{ report.listing_title }}</a>
+                {% else %}
+                  {{ report.listing_title }}
+                {% endif %}
+              </span>
+              <time class="inbox-time">{{ report.timestamp.strftime('%b %d, %Y') }}</time>
+            </div>
+            <p class="inbox-preview" style="margin-top:4px;">
+              <strong>{{ report.reason }}</strong>
+              {% if report.details %} — {{ report.details }}{% endif %}
+            </p>
+            <p class="inbox-preview" style="margin-top:2px; opacity:0.7;">Reported by {{ report.reporter_name }}</p>
+          </div>
+
+          <div class="inbox-role">
+            <span class="role-chip">{{ report.reason }}</span>
+          </div>
+
+        </div>
+      {% endfor %}
+    </div>
+
+  {% else %}
+    <div class="inbox-empty card-surface">
+      <div class="inbox-empty-icon">🚩</div>
+      <h3>No reports yet</h3>
+      <p>Reports submitted by shoppers about listings will show up here.</p>
+      <a href="{{ url_for('index') }}" class="primary-button" style="display:inline-flex; margin-top:12px;">Browse listings</a>
+    </div>
+  {% endif %}
+
+</section>
+{% endblock %}
