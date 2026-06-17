@@ -62,7 +62,6 @@ class ListingModel(db.Model):
     description = db.Column(db.String(1000), nullable=False)                  # DESCRIPTION VARCHAR(1000)
 
     # ── Status & engagement ───────────────────────────────────────────────────
-    likes    = db.Column(db.Integer, nullable=False, default=0)               # LIKES    INTEGER (≥ 0)
     reserved = db.Column(db.Boolean, nullable=False, default=False)           # RESERVED bool
     buyable  = db.Column(db.Boolean, nullable=False, default=True)            # BUYABLE  bool
 
@@ -82,6 +81,7 @@ class ListingModel(db.Model):
     created_at = db.synonym("listed_date")
 
     offers = db.relationship("Offer", backref="listing", lazy=True, cascade="all, delete-orphan")
+    likes = db.relationship("Like", backref="listing", lazy=True, cascade="all, delete-orphan")
     images = db.relationship(
         "ListingImage",
         backref="listing",
@@ -115,6 +115,19 @@ class ListingModel(db.Model):
         return len(self.offers)
 
     @property
+    def like_count(self) -> int:
+        return len(self.likes)
+
+    def is_liked_by(self, user: "User | None") -> bool:
+        """Whether `user` has personally liked this listing. Only ever
+        checks the requesting user's own like — there is no method or
+        route that lists *other* users' likes, which is what keeps a
+        shopper's liked items private to them."""
+        if user is None or not getattr(user, "is_authenticated", False):
+            return False
+        return any(like.user_id == user.id for like in self.likes)
+
+    @property
     def gallery_images(self) -> tuple[str, ...]:
         """All photos for this listing, cover first. Falls back to the single
         legacy image (uploaded path or seeded artwork) when no rows exist in
@@ -143,6 +156,32 @@ class ListingImage(db.Model):
     @property
     def url(self) -> str:
         return f"/static/{self.image_path}"
+
+
+class Like(db.Model):
+    """One row per (user, listing) like. This is what makes the heart
+    button a real per-user toggle instead of a single shared counter:
+    re-liking can't inflate the count, and a listing's like_count is just
+    len(self.likes). The unique constraint stops duplicate rows, and the
+    only way to look these up by user (see User.liked_listings and the
+    dashboard route) is filtered to that user's own id — there is no
+    route that exposes which users liked a given listing, so each
+    shopper's liked items stay private to them."""
+    __tablename__ = "like"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    listing_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "listing_id", name="uq_like_user_listing"),
+    )
+
+    user = db.relationship(
+        "User",
+        foreign_keys=[user_id],
+        backref=db.backref("liked_listings", lazy=True, cascade="all, delete-orphan"),
+    )
 
 
 class Offer(db.Model):

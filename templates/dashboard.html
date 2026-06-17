@@ -114,11 +114,53 @@
           <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
           <div class="price-row">
             <strong>{{ listing.price|money }}</strong>
+            <span class="product-likes">&hearts; {{ listing.like_count }}</span>
           </div>
         </div>
       </article>
     {% else %}
       <div class="empty-state wide">You have not posted any items yet.</div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ── Items you've liked ────────────────────────────────────────────────── -->
+<section class="section-block">
+  <div class="section-heading">
+    <div>
+      <h2>Items you&rsquo;ve liked</h2>
+      <p>Private to your account &mdash; other shoppers can&rsquo;t see what you&rsquo;ve liked.</p>
+    </div>
+  </div>
+
+  <div class="listing-grid compact-grid">
+    {% for listing in liked_listings %}
+      <article class="product-card reveal" data-reveal>
+        <div class="product-image-wrap">
+          <a href="{{ url_for('listing_detail', listing_id=listing.id) }}">
+            <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
+          </a>
+          {% if listing.buyer_id %}
+            <span class="badge badge--muted">Sold</span>
+          {% elif listing.reserved %}
+            <span class="badge badge--muted">Reserved</span>
+          {% endif %}
+          <form method="post" action="{{ url_for('toggle_like', listing_id=listing.id) }}" class="like-toggle-form">
+            <input type="hidden" name="next" value="{{ url_for('dashboard') }}">
+            <button type="submit" class="like-toggle is-liked" aria-pressed="true" aria-label="Remove {{ listing.title }} from your likes">&hearts;</button>
+          </form>
+        </div>
+        <div class="product-copy">
+          <p class="product-category">{{ listing.category }}</p>
+          <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
+          <p class="product-meta">{{ listing.condition }} &middot; {{ listing.seller_name }}</p>
+          <div class="price-row">
+            <strong>{{ listing.price|money }}</strong>
+          </div>
+        </div>
+      </article>
+    {% else %}
+      <div class="empty-state wide">You haven&rsquo;t liked anything yet. Tap the heart on a listing to save it here.</div>
     {% endfor %}
   </div>
 </section>

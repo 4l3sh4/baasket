@@ -90,10 +90,21 @@
     <div class="listing-grid">
       {% for listing in featured %}
         <article class="product-card reveal" data-reveal>
-          <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="product-image-wrap">
-            <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
+          <div class="product-image-wrap">
+            <a href="{{ url_for('listing_detail', listing_id=listing.id) }}">
+              <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
+            </a>
             <span class="badge">{{ listing.badge }}</span>
-          </a>
+            {% if current_user.is_authenticated and current_user.id != listing.seller_id %}
+              {% set is_liked = listing.is_liked_by(current_user) %}
+              <form method="post" action="{{ url_for('toggle_like', listing_id=listing.id) }}" class="like-toggle-form">
+                <input type="hidden" name="next" value="{{ request.full_path }}">
+                <button type="submit" class="like-toggle {% if is_liked %}is-liked{% endif %}" aria-pressed="{{ 'true' if is_liked else 'false' }}" aria-label="{{ 'Remove from your likes' if is_liked else 'Add to your likes' }}">{{ "♥" if is_liked else "♡" }}</button>
+              </form>
+            {% elif not current_user.is_authenticated %}
+              <a href="{{ url_for('login', next=request.path) }}" class="like-toggle" aria-label="Log in to like this listing">&#9825;</a>
+            {% endif %}
+          </div>
           <div class="product-copy">
             <p class="product-category">{{ listing.category }}</p>
             <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
@@ -153,10 +164,21 @@
   <div class="listing-grid compact-grid">
     {% for listing in listings %}
       <article class="product-card reveal" data-reveal>
-        <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="product-image-wrap">
-          <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
+        <div class="product-image-wrap">
+          <a href="{{ url_for('listing_detail', listing_id=listing.id) }}">
+            <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
+          </a>
           <span class="badge">{{ listing.badge }}</span>
-        </a>
+          {% if current_user.is_authenticated and current_user.id != listing.seller_id %}
+            {% set is_liked = listing.is_liked_by(current_user) %}
+            <form method="post" action="{{ url_for('toggle_like', listing_id=listing.id) }}" class="like-toggle-form">
+              <input type="hidden" name="next" value="{{ request.full_path }}">
+              <button type="submit" class="like-toggle {% if is_liked %}is-liked{% endif %}" aria-pressed="{{ 'true' if is_liked else 'false' }}" aria-label="{{ 'Remove from your likes' if is_liked else 'Add to your likes' }}">{{ "♥" if is_liked else "♡" }}</button>
+            </form>
+          {% elif not current_user.is_authenticated %}
+            <a href="{{ url_for('login', next=request.path) }}" class="like-toggle" aria-label="Log in to like this listing">&#9825;</a>
+          {% endif %}
+        </div>
         <div class="product-copy">
           <p class="product-category">{{ listing.category }}</p>
           <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>

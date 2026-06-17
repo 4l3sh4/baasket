@@ -44,7 +44,19 @@
 
         <div class="gallery-actions">
           <button type="button" class="gallery-pill" id="share-button">Share</button>
-          <span class="gallery-pill gallery-pill--static">&hearts; {{ listing.likes }} like{{ "s" if listing.likes != 1 else "" }}</span>
+          {% if is_owner %}
+            <span class="gallery-pill gallery-pill--static">&hearts; {{ listing.like_count }} like{{ "s" if listing.like_count != 1 else "" }}</span>
+          {% elif current_user.is_authenticated %}
+            {% set is_liked = listing.is_liked_by(current_user) %}
+            <form method="post" action="{{ url_for('toggle_like', listing_id=listing.id) }}" class="like-form">
+              <input type="hidden" name="next" value="{{ request.full_path }}">
+              <button type="submit" class="gallery-pill like-pill {% if is_liked %}is-liked{% endif %}" aria-pressed="{{ 'true' if is_liked else 'false' }}">
+                {{ "♥" if is_liked else "♡" }} {{ listing.like_count }} like{{ "s" if listing.like_count != 1 else "" }}
+              </button>
+            </form>
+          {% else %}
+            <a href="{{ url_for('login', next=request.path) }}" class="gallery-pill">&hearts; {{ listing.like_count }} like{{ "s" if listing.like_count != 1 else "" }}</a>
+          {% endif %}
           {% if current_user.is_authenticated and not is_owner %}
             <button type="button" class="gallery-pill" id="report-open-button">Report</button>
           {% endif %}
@@ -276,7 +288,7 @@
 
       <div class="buy-price-row">
         <strong class="detail-price">{{ listing.price|money }}</strong>
-        <span class="gallery-pill gallery-pill--static" style="background: rgba(21,32,43,0.08); color: var(--muted);">&hearts; {{ listing.likes }}</span>
+        <span class="gallery-pill gallery-pill--static" style="background: rgba(21,32,43,0.08); color: var(--muted);">&hearts; {{ listing.like_count }}</span>
       </div>
 
       {% if is_owner %}
@@ -332,14 +344,25 @@
   <div class="listing-grid compact-grid">
     {% for item in related %}
       <article class="product-card reveal" data-reveal>
-        <a href="{{ url_for('listing_detail', listing_id=item.id) }}" class="product-image-wrap">
-          <img src="{{ item.image_data }}" alt="{{ item.title }}">
+        <div class="product-image-wrap">
+          <a href="{{ url_for('listing_detail', listing_id=item.id) }}">
+            <img src="{{ item.image_data }}" alt="{{ item.title }}">
+          </a>
           {% if item.buyer_id %}
             <span class="badge badge--muted">Sold</span>
           {% elif item.reserved %}
             <span class="badge badge--muted">Reserved</span>
           {% endif %}
-        </a>
+          {% if current_user.is_authenticated and current_user.id != item.seller_id %}
+            {% set is_liked = item.is_liked_by(current_user) %}
+            <form method="post" action="{{ url_for('toggle_like', listing_id=item.id) }}" class="like-toggle-form">
+              <input type="hidden" name="next" value="{{ request.full_path }}">
+              <button type="submit" class="like-toggle {% if is_liked %}is-liked{% endif %}" aria-pressed="{{ 'true' if is_liked else 'false' }}" aria-label="{{ 'Remove from your likes' if is_liked else 'Add to your likes' }}">{{ "♥" if is_liked else "♡" }}</button>
+            </form>
+          {% elif not current_user.is_authenticated %}
+            <a href="{{ url_for('login', next=request.path) }}" class="like-toggle" aria-label="Log in to like this listing">&#9825;</a>
+          {% endif %}
+        </div>
         <div class="product-copy">
           <div class="product-seller-row">
             <img src="{{ item.seller.profile_image_url if item.seller else '/static/assets/logo/baasket_logo.png' }}" alt="" class="avatar-xs">
@@ -351,7 +374,7 @@
           <p class="product-meta">{{ item.condition }} &middot; {{ item.category }}</p>
           <div class="price-row">
             <strong>{{ item.price|money }}</strong>
-            <span class="product-likes">&hearts; {{ item.likes }}</span>
+            <span class="product-likes">&hearts; {{ item.like_count }}</span>
           </div>
         </div>
       </article>

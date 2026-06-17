@@ -16,7 +16,7 @@ from typing import TypedDict
 
 from catalog import ListingFactory, _build_art, build_seeded_catalog
 from extensions import db, login_manager
-from models import Item, ListingImage, Notification, Offer, OrderItemModel, OrderModel, User, ChatSession, Message, Review, Report
+from models import Item, Like, ListingImage, Notification, Offer, OrderItemModel, OrderModel, User, ChatSession, Message, Review, Report
 from notifications import build_notification_subject
 from logistics_v2.flask_adapter import run_checkout_logistics_v2
 from offers import OfferBoard, get_redeemable_offer
@@ -296,6 +296,16 @@ def _timeago(value: object) -> str:
 	return f"{years} year{'s' if years != 1 else ''} ago"
 
 
+def _safe_redirect_target(candidate: str | None, fallback: str) -> str:
+	"""Only follow same-site relative paths from a posted 'next' value (used
+	by the like button so it can return the shopper to whichever grid or
+	detail page they clicked it from); anything else falls back to a
+	known-safe target instead of redirecting off-site."""
+	if candidate and candidate.startswith("/") and not candidate.startswith("//"):
+		return candidate
+	return fallback
+
+
 class CartLine(TypedDict):
 	listing: Item
 	quantity: int
@@ -524,6 +534,18 @@ def _sales_history_for_user(user_id: int) -> list[dict[str, object]]:
 	]
 
 
+def _liked_listings_for_user(user_id: int) -> list[Item]:
+	"""A user's own liked items, most recently liked first. Only ever
+	filtered by the requesting user's id — there is no route that exposes
+	*who* liked a listing, so this stays private to each shopper."""
+	return (
+		Item.query.join(Like, Like.listing_id == Item.id)
+		.filter(Like.user_id == user_id)
+		.order_by(Like.created_at.desc())
+		.all()
+	)
+
+
 def _seed_database() -> None:
 	if User.query.count() == 0:
 		demo_user = User()
@@ -693,7 +715,6 @@ def create_app() -> Flask:
 					("is_active", "INTEGER"),
 					("subcategory", "TEXT"),
 					("buyer_id", "INTEGER"),
-					("likes", "INTEGER DEFAULT 0"),
 					("reserved", "INTEGER DEFAULT 0"),
 					("buyable", "INTEGER DEFAULT 1"),
 					("listed_date", "TEXT"),
@@ -794,6 +815,30 @@ def create_app() -> Flask:
 		flash(f"{listing.title} was added to your basket.", "success")
 		return redirect(url_for("cart_view"))
 
+	@app.post("/listing/<int:listing_id>/like")
+	@login_required
+	def toggle_like(listing_id: int):
+		listing = db.session.get(Item, listing_id)
+		if listing is None:
+			flash("That listing could not be found.", "warning")
+			return redirect(url_for("index"))
+
+		fallback = url_for("listing_detail", listing_id=listing.id)
+		destination = _safe_redirect_target(request.form.get("next"), fallback)
+
+		if listing.seller_id == current_user.id:
+			flash("You cannot like your own listing.", "warning")
+			return redirect(destination)
+
+		existing = Like.query.filter_by(user_id=current_user.id, listing_id=listing.id).first()
+		if existing is not None:
+			db.session.delete(existing)
+		else:
+			db.session.add(Like(user_id=current_user.id, listing_id=listing.id))
+		db.session.commit()
+
+		return redirect(destination)
+
 	@app.post("/listing/<int:listing_id>/report")
 	@login_required
 	def report_listing(listing_id: int):
@@ -865,7 +910,6 @@ def create_app() -> Flask:
 			listing.description = description
 			listing.image_path = ""
 			listing.seed_image_data = seed_image_data
-			listing.likes = 0
 			listing.buyable = buyable
 			for position, image_path in enumerate(image_paths):
 				listing.images.append(ListingImage(image_path=image_path, position=position))
@@ -1378,6 +1422,7 @@ def create_app() -> Flask:
 		stats = _listing_stats_for_user(current_user.id)
 		# Total reviews received by the current user
 		reviews_count = Review.query.filter_by(created_by=current_user.id).count()
+		liked_listings = _liked_listings_for_user(current_user.id)
 		return render_template(
 			"dashboard.html",
 			title="Seller Dashboard | Baasket",
@@ -1385,6 +1430,7 @@ def create_app() -> Flask:
 			sales_history=sales_history,
 			stats=stats,
 			reviews_count=reviews_count,
+			liked_listings=liked_listings,
 			category_list=_build_category_list(),
 		)
 
