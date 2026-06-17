@@ -189,6 +189,10 @@ textarea {
   align-items: stretch;
 }
 
+.hero.hero-solo {
+  grid-template-columns: 1fr;
+}
+
 .hero-copy,
 .hero-card,
 .card-surface,
@@ -224,6 +228,14 @@ h3 {
 .hero-copy h1 {
   font-size: clamp(2.6rem, 6vw, 4.9rem);
   max-width: 12ch;
+}
+
+.hero-solo .hero-copy h1 {
+  max-width: 22ch;
+}
+
+.hero-solo .hero-text {
+  max-width: 120ch;
 }
 
 .hero-text,

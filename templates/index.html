@@ -25,7 +25,7 @@
   </div>
 </section>
 
-<section class="hero reveal" data-reveal>
+<section class="hero reveal{% if not featured %} hero-solo{% endif %}" data-reveal>
   <div class="hero-copy">
     <p class="eyebrow">Curated marketplace, built for quick moves</p>
     <h1>Sell your pre-loved items, hassle-free.</h1>
@@ -46,13 +46,13 @@
     </form>
   </div>
 
-  <div class="hero-card reveal" data-reveal>
-    <div class="hero-card-top">
-      <span class="badge">Featured now</span>
-      {% if featured %}<span class="subtle">Listed {{ featured[0].listed_date|timeago }}</span>{% endif %}
-    </div>
-    {% if featured %}
-      {% set feature = featured[0] %}
+  {% if featured %}
+    {% set feature = featured[0] %}
+    <div class="hero-card reveal" data-reveal>
+      <div class="hero-card-top">
+        <span class="badge">Featured now</span>
+        <span class="subtle">Listed {{ feature.listed_date|timeago }}</span>
+      </div>
       <div class="hero-image-wrap">
         <a href="{{ url_for('listing_detail', listing_id=feature.id) }}">
           <img src="{{ feature.image_data }}" alt="{{ feature.title }}" class="hero-preview">
@@ -82,8 +82,8 @@
           <a href="{{ url_for('login', next=url_for('listing_detail', listing_id=feature.id)) }}" class="ghost-button">Add</a>
         {% endif %}
       </div>
-    {% endif %}
-  </div>
+    </div>
+  {% endif %}
 </section>
 
 <section class="section-block">

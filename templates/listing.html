@@ -343,6 +343,7 @@
 {% if search_terms %}
   <section class="section-block card-surface reveal" data-reveal>
     <h2>What others also search for</h2>
+    <br>
     <div class="chip-scroll">
       {% for term in search_terms %}
         <a href="{{ url_for('browse_category', category=listing.category, sub=term.sub) if term.sub else url_for('index', q=term.label) }}" class="chip-option">{{ term.label }}</a>

@@ -17,7 +17,7 @@ class Listing:
     subcategory_id: str              # SUBCATEGORYID — FK → SUBCATEGORY(SUBCATEGORYID)
     title: str                       # TITLE — VARCHAR(100)
     price: Decimal                   # PRICE — FLOAT
-    condition: str                   # CONDITION — VARCHAR(10)
+    condition: str                   # CONDITION — VARCHAR(15)
     listed_date: str                 # LISTEDDATE — YYYY-MM-DD HH:MM:SS
     description: str                 # DESCRIPTION — VARCHAR(1000)
     likes: int                       # LIKES — INTEGER (≥ 0)

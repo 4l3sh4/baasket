@@ -210,15 +210,14 @@ CATEGORY_ICONS: dict[str, str] = {
 }
 CATEGORY_ICON_FALLBACK = "tech.png"
 
-# Conditions as stored in the database (condition field is VARCHAR(10), so values are truncated)
-# These match what sell.html offers, after the [:10] slice applied in the sell route.
+# Conditions as stored in the databas
 BROWSE_CONDITIONS: list[str] = [
-	"Brand New",   # 9  chars – unchanged
-	"Like New",    # 8  chars – unchanged
-	"Lightly Us",  # truncated from "Lightly Used"
-	"Well Used",   # 9  chars – unchanged
-	"Heavily Us",  # truncated from "Heavily Used"
-	"For Parts",   # 9  chars – unchanged
+	"Brand New",
+	"Like New",
+	"Lightly Used",
+	"Well Used",
+	"Heavily Used",
+	"For Parts",
 ]
 
 
@@ -911,7 +910,7 @@ def create_app() -> Flask:
 			subcategory = request.form.get("subcategory", "").strip()
 			price_text = request.form.get("price", "").strip()
 			condition = request.form.get("condition", "").strip() or "Good"
-			condition = condition[:10]  # enforce VARCHAR(10)
+			condition = condition[:15]  # enforce VARCHAR(10)
 			location = request.form.get("location", "").strip() or "Local pickup"
 			description = request.form.get("description", "").strip()[:1000]
 			buyable  = request.form.get("buyable",  "1") == "1"

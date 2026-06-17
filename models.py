@@ -62,7 +62,7 @@ class ListingModel(db.Model):
     # ── Core listing fields ───────────────────────────────────────────────────
     title       = db.Column(db.String(100), nullable=False, index=True)       # TITLE    VARCHAR(100)
     price       = db.Column(db.Float,       nullable=False)                   # PRICE    FLOAT
-    condition   = db.Column(db.String(10),  nullable=False)                   # CONDITION VARCHAR(10)
+    condition   = db.Column(db.String(15),  nullable=False)                   # CONDITION VARCHAR(15)
     listed_date = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow, index=True)  # LISTEDDATE
     description = db.Column(db.String(1000), nullable=False)                  # DESCRIPTION VARCHAR(1000)
 
