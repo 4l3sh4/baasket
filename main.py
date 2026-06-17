@@ -538,6 +538,15 @@ def _sales_history_for_user(user_id: int) -> list[dict[str, object]]:
 	]
 
 
+def _orders_for_buyer(user_id: int) -> list[OrderModel]:
+	"""All orders placed by this user, current and past, most recent first."""
+	return (
+		OrderModel.query.filter_by(buyer_id=user_id)
+		.order_by(OrderModel.created_at.desc())
+		.all()
+	)
+
+
 def _liked_listings_for_user(user_id: int) -> list[Item]:
 	"""A user's own liked items, most recently liked first. Only ever
 	filtered by the requesting user's id — there is no route that exposes
@@ -1639,6 +1648,16 @@ def create_app() -> Flask:
 			notifications=notifs,
 		)
 
+
+	@app.get('/orders')
+	@login_required
+	def orders_list() -> ResponseReturnValue:
+		orders = _orders_for_buyer(current_user.id)
+		return render_template(
+			'orders.html',
+			title='Your Orders | Baasket',
+			orders=orders,
+		)
 
 	@app.get('/orders/<int:order_id>') # logistic
 	@login_required
