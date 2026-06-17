@@ -12,6 +12,8 @@
   --accent-soft: #ffd6cc;
   --success: #1f7a54;
   --warning: #a96c08;
+  --danger: #db3535;
+  --danger-deep: #b8281f;
   --shadow: 0 24px 60px rgba(21, 32, 43, 0.12);
   --radius-xl: 30px;
   --radius-lg: 22px;
@@ -1531,6 +1533,58 @@ h3 {
 .inbox-arrow {
   color: var(--muted);
   font-size: 1rem;
+}
+
+/* Admin report cards — listing/seller summary up top, moderation
+   actions in a footer that stays visible at every breakpoint (unlike
+   .inbox-role, which hides on narrow screens for the regular inbox). */
+.report-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.report-card-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.report-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.report-seller-note {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.report-action-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.report-action-buttons form {
+  margin: 0;
+}
+
+.danger-button {
+  padding: 10px 16px;
+  font-size: 0.85rem;
+  background: rgba(219, 53, 53, 0.1);
+  color: var(--danger-deep);
+}
+
+.danger-button:hover {
+  background: rgba(219, 53, 53, 0.18);
 }
 
 /* Empty state */

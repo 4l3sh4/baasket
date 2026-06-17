@@ -620,6 +620,20 @@ def _seed_database() -> None:
 	db.session.commit()
 
 
+def _authorize_report_action(report_id: str) -> Report | None:
+	"""Shared guard for the two admin report-action routes: only the admin
+	a report was actually routed to may act on it, mirroring the filter
+	already used to build the /admin/reports inbox."""
+	if not current_user.is_admin:
+		flash("That action is only available to admins.", "warning")
+		return None
+	report = db.session.get(Report, report_id)
+	if report is None or report.received_by != current_user.id:
+		flash("That report could not be found.", "warning")
+		return None
+	return report
+
+
 def create_app() -> Flask:
 	_ensure_storage()
 
@@ -1702,6 +1716,64 @@ def create_app() -> Flask:
 			title="Reports | Baasket",
 			reports=reports,
 		)
+
+	@app.post("/admin/reports/<string:report_id>/remove-listing")
+	@login_required
+	def admin_remove_reported_listing(report_id: str) -> ResponseReturnValue:
+		report = _authorize_report_action(report_id)
+		if report is None:
+			return redirect(url_for("index") if not current_user.is_admin else url_for("admin_reports"))
+
+		listing = report.listing
+		if listing is None:
+			db.session.delete(report)
+			db.session.commit()
+			flash("That listing was already removed. The report has been cleared.", "info")
+			return redirect(url_for("admin_reports"))
+
+		listing_title = listing.title
+		# Every report pointing at this listing is now moot, not just the one
+		# the admin clicked through from — clear them all out of the inbox.
+		Report.query.filter_by(listing_id=listing.id).delete(synchronize_session=False)
+		db.session.delete(listing)  # cascades to its offers, likes, and images
+		db.session.commit()
+
+		flash(f'Removed the listing "{listing_title}" and cleared related reports.', "success")
+		return redirect(url_for("admin_reports"))
+
+	@app.post("/admin/reports/<string:report_id>/remove-user")
+	@login_required
+	def admin_remove_reported_user(report_id: str) -> ResponseReturnValue:
+		report = _authorize_report_action(report_id)
+		if report is None:
+			return redirect(url_for("index") if not current_user.is_admin else url_for("admin_reports"))
+
+		listing = report.listing
+		if listing is None:
+			db.session.delete(report)
+			db.session.commit()
+			flash("That listing was already removed, so there's no seller left to act on. The report has been cleared.", "info")
+			return redirect(url_for("admin_reports"))
+
+		seller = listing.seller
+		if seller is None:
+			flash("That listing's seller could not be found.", "warning")
+			return redirect(url_for("admin_reports"))
+		if seller.is_admin:
+			flash("Admin accounts can't be removed this way.", "warning")
+			return redirect(url_for("admin_reports"))
+
+		seller_username = seller.username
+		seller_listing_ids = [item.id for item in seller.listings]
+		if seller_listing_ids:
+			# Clear out every report tied to any of this seller's listings —
+			# they're all about to be deleted along with the seller.
+			Report.query.filter(Report.listing_id.in_(seller_listing_ids)).delete(synchronize_session=False)
+		db.session.delete(seller)  # cascades to their listings, offers, likes, and images
+		db.session.commit()
+
+		flash(f'Removed the user "{seller_username}" and their listings.', "success")
+		return redirect(url_for("admin_reports"))
 
 
 	@app.get('/orders')
