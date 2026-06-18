@@ -32,6 +32,7 @@ class User(db.Model, UserMixin):
     phone_number = db.Column(db.String(40), nullable=True, default="")
     country = db.Column(db.String(80), nullable=True, default="")
     last_seen = db.Column(db.DateTime, nullable=True)
+    role = db.Column(db.String(20), nullable=False, default="user", server_default="user")
 
     listings = db.relationship("ListingModel", foreign_keys="[ListingModel.seller_id]", backref="seller", lazy=True, cascade="all, delete-orphan")
     followers = db.relationship(
@@ -76,6 +77,10 @@ class User(db.Model, UserMixin):
             return f"/static/{self.profile_image}"
         return "/static/assets/logo/baasket_logo.png"
 
+    @property
+    def is_admin(self) -> bool:
+        return self.role == "admin"
+
 
 class ListingModel(db.Model):
     # ── Primary key ──────────────────────────────────────────────────────────
@@ -92,16 +97,19 @@ class ListingModel(db.Model):
     # ── Core listing fields ───────────────────────────────────────────────────
     title       = db.Column(db.String(100), nullable=False, index=True)       # TITLE    VARCHAR(100)
     price       = db.Column(db.Float,       nullable=False)                   # PRICE    FLOAT
-    condition   = db.Column(db.String(10),  nullable=False)                   # CONDITION VARCHAR(10)
+    condition   = db.Column(db.String(15),  nullable=False)                   # CONDITION VARCHAR(15)
     listed_date = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow, index=True)  # LISTEDDATE
     description = db.Column(db.String(1000), nullable=False)                  # DESCRIPTION VARCHAR(1000)
 
     # ── Status & engagement ───────────────────────────────────────────────────
-    likes    = db.Column(db.Integer, nullable=False, default=0)               # LIKES    INTEGER (≥ 0)
     reserved = db.Column(db.Boolean, nullable=False, default=False)           # RESERVED bool
     buyable  = db.Column(db.Boolean, nullable=False, default=True)            # BUYABLE  bool
 
     # ── Internal / legacy fields ──────────────────────────────────────────────
+    # image_path / seed_image_data are kept for backward compatibility with the
+    # seeded demo catalog (see catalog.py) and any listing created before the
+    # multi-image gallery existed. Once a listing has rows in `images`, those
+    # take priority — see image_data / gallery_images below.
     image_path     = db.Column(db.String(255), nullable=False, default="")
     seed_image_data = db.Column(db.Text,       nullable=False, default="")
     location       = db.Column(db.String(80),  nullable=False, default="")
@@ -113,6 +121,16 @@ class ListingModel(db.Model):
     created_at = db.synonym("listed_date")
 
     offers = db.relationship("Offer", backref="listing", lazy=True, cascade="all, delete-orphan")
+    likes = db.relationship("Like", backref="listing", lazy=True, cascade="all, delete-orphan")
+    images = db.relationship(
+        "ListingImage",
+        backref="listing",
+        lazy=True,
+        order_by="ListingImage.position",
+        cascade="all, delete-orphan",
+    )
+
+    MAX_IMAGES = 10
 
     @property
     def price_label(self) -> str:
@@ -124,6 +142,10 @@ class ListingModel(db.Model):
 
     @property
     def image_data(self) -> str:
+        """Cover photo — the first uploaded image, or a legacy/seeded fallback."""
+        ordered = sorted(self.images, key=lambda img: img.position) if self.images else []
+        if ordered:
+            return ordered[0].url
         if self.image_path:
             return f"/static/{self.image_path}"
         return self.seed_image_data or "/static/assets/logo/baasket_logo.png"
@@ -131,6 +153,75 @@ class ListingModel(db.Model):
     @property
     def offer_count(self) -> int:
         return len(self.offers)
+
+    @property
+    def like_count(self) -> int:
+        return len(self.likes)
+
+    def is_liked_by(self, user: "User | None") -> bool:
+        """Whether `user` has personally liked this listing. Only ever
+        checks the requesting user's own like — there is no method or
+        route that lists *other* users' likes, which is what keeps a
+        shopper's liked items private to them."""
+        if user is None or not getattr(user, "is_authenticated", False):
+            return False
+        return any(like.user_id == user.id for like in self.likes)
+
+    @property
+    def gallery_images(self) -> tuple[str, ...]:
+        """All photos for this listing, cover first. Falls back to the single
+        legacy image (uploaded path or seeded artwork) when no rows exist in
+        `images`, so older/seeded listings still render correctly."""
+        ordered = sorted(self.images, key=lambda img: img.position) if self.images else []
+        if ordered:
+            return tuple(img.url for img in ordered)
+        return (self.image_data,)
+
+    @property
+    def posted_label(self) -> str:
+        return self.listed_date.strftime("%d %b %Y") if self.listed_date else ""
+
+
+class ListingImage(db.Model):
+    """One photo belonging to a listing. A listing can have up to
+    ListingModel.MAX_IMAGES of these; `position` controls display order,
+    with position 0 acting as the cover photo shown in cards/thumbnails."""
+    __tablename__ = "listing_image"
+    id = db.Column(db.Integer, primary_key=True)
+    listing_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=False, index=True)
+    image_path = db.Column(db.String(255), nullable=False)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    @property
+    def url(self) -> str:
+        return f"/static/{self.image_path}"
+
+
+class Like(db.Model):
+    """One row per (user, listing) like. This is what makes the heart
+    button a real per-user toggle instead of a single shared counter:
+    re-liking can't inflate the count, and a listing's like_count is just
+    len(self.likes). The unique constraint stops duplicate rows, and the
+    only way to look these up by user (see User.liked_listings and the
+    dashboard route) is filtered to that user's own id — there is no
+    route that exposes which users liked a given listing, so each
+    shopper's liked items stay private to them."""
+    __tablename__ = "like"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    listing_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "listing_id", name="uq_like_user_listing"),
+    )
+
+    user = db.relationship(
+        "User",
+        foreign_keys=[user_id],
+        backref=db.backref("liked_listings", lazy=True, cascade="all, delete-orphan"),
+    )
 
 
 class Offer(db.Model):
@@ -264,6 +355,34 @@ class Review(db.Model):
     comment = db.Column(db.String(500), nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
 
+    # The seller being reviewed, and (optionally) the listing the review is
+    # about. Both are nullable so existing rows created before this column
+    # existed keep working; the seller's review feed simply skips them.
+    seller_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
+    listing_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    # Ties a review to the specific purchase it was left for. order_item_id
+    # is what the "leave a review" button on the order page is keyed on, so
+    # a buyer gets exactly one review per purchased item.
+    order_id = db.Column(db.Integer, db.ForeignKey("order_model.id"), nullable=True, index=True)
+    order_item_id = db.Column(db.Integer, db.ForeignKey("order_item_model.id"), nullable=True, index=True, unique=True)
+
+    reviewer = db.relationship("User", foreign_keys=[created_by])
+    seller = db.relationship("User", foreign_keys=[seller_id])
+    listing = db.relationship("ListingModel", foreign_keys=[listing_id])
+    order = db.relationship("OrderModel", foreign_keys=[order_id])
+    order_item = db.relationship("OrderItemModel", foreign_keys=[order_item_id])
+    images = db.relationship(
+        "ReviewImage",
+        backref="review",
+        lazy=True,
+        order_by="ReviewImage.position",
+        cascade="all, delete-orphan",
+    )
+
+    MAX_IMAGES = 5
+
     def addReview(self) -> bool:
         return True
 
@@ -271,6 +390,34 @@ class Review(db.Model):
         self.ratingValue = new_rating
         self.comment = new_comment
         return True
+
+    @property
+    def reviewer_name(self) -> str:
+        return self.reviewer.username if self.reviewer else "Baasket user"
+
+    @property
+    def full_stars(self) -> int:
+        return max(0, min(5, round(self.ratingValue)))
+
+    @property
+    def image_urls(self) -> tuple[str, ...]:
+        ordered = sorted(self.images, key=lambda img: img.position) if self.images else []
+        return tuple(img.url for img in ordered)
+
+
+class ReviewImage(db.Model):
+    """One photo attached to a review. A review can have up to
+    Review.MAX_IMAGES of these; `position` controls display order."""
+    __tablename__ = "review_image"
+    id = db.Column(db.Integer, primary_key=True)
+    review_id = db.Column(db.String(36), db.ForeignKey("review.reviewID"), nullable=False, index=True)
+    image_path = db.Column(db.String(255), nullable=False)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    @property
+    def url(self) -> str:
+        return f"/static/{self.image_path}"
 
 
 class Report(db.Model):
@@ -280,9 +427,23 @@ class Report(db.Model):
     details = db.Column(db.Text, nullable=True)
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     received_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    reporter_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    listing_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=True)
+
+    reporter = db.relationship("User", foreign_keys=[reporter_id])
+    recipient = db.relationship("User", foreign_keys=[received_by])
+    listing = db.relationship("ListingModel", foreign_keys=[listing_id])
 
     def createReport(self) -> bool:
         return True
+
+    @property
+    def reporter_name(self) -> str:
+        return self.reporter.username if self.reporter else "Unknown user"
+
+    @property
+    def listing_title(self) -> str:
+        return self.listing.title if self.listing else "Listing no longer available"
 
 
 class Cart(db.Model):

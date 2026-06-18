@@ -63,14 +63,77 @@
     {% if order.items %}
       <div class="order-items-list">
         {% for item in order.items %}
-          <article class="order-item-row">
-            <div class="order-item-row__info">
-              <h3>{{ item.title }}</h3>
-              <p>{{ item.unit_price_label }} each</p>
+          {% set review = reviews_by_item.get(item.id) %}
+          <article class="order-item-row order-item-row--stacked">
+            <div class="order-item-row__top">
+              <div class="order-item-row__info">
+                <h3>{{ item.title }}</h3>
+                <p>{{ item.unit_price_label }} each</p>
+              </div>
+              <div class="order-item-row__meta">
+                <span class="order-item-row__qty">Qty {{ item.quantity }}</span>
+                <strong>{{ item.line_total_label }}</strong>
+              </div>
             </div>
-            <div class="order-item-row__meta">
-              <span class="order-item-row__qty">Qty {{ item.quantity }}</span>
-              <strong>{{ item.line_total_label }}</strong>
+
+            <div class="order-item-review" data-tracking-gate="delivered" {% if order.tracking_status != 'delivered' %}hidden{% endif %}>
+              {% if review %}
+                <div class="review-card review-card--own">
+                  <div class="review-head">
+                    <strong>Your review</strong>
+                    <span class="review-meta">{{ review.created_at|timeago }}</span>
+                  </div>
+                  <span class="stars" aria-hidden="true">{% for i in range(5) %}<span class="star{% if i < review.full_stars %} is-filled{% endif %}">&#9733;</span>{% endfor %}</span>
+                  {% if review.comment %}<p class="review-comment">{{ review.comment }}</p>{% endif %}
+                  {% if review.image_urls %}
+                    <div class="review-photos-grid">
+                      {% for url in review.image_urls %}
+                        <a href="{{ url }}" target="_blank" rel="noopener" class="review-photo-cell">
+                          <img src="{{ url }}" alt="Review photo">
+                        </a>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                </div>
+              {% else %}
+                <button type="button" class="secondary-button review-open-button" data-review-open-button data-target="review-form-{{ item.id }}">Leave a review</button>
+
+                <div class="review-form-panel card-surface" id="review-form-{{ item.id }}" hidden>
+                  <h3>Review &ldquo;{{ item.title }}&rdquo;</h3>
+                  <form method="post" action="{{ url_for('submit_review', order_id=order.id, order_item_id=item.id) }}" enctype="multipart/form-data" class="stack-form review-form">
+                    <label>
+                      Rating
+                      <div class="star-input" data-star-input>
+                        <input type="hidden" name="rating" value="5" data-star-input-value>
+                        {% for i in range(1, 6) %}
+                          <button type="button" class="star-input__star" data-star-value="{{ i }}" aria-label="{{ i }} star{{ 's' if i != 1 else '' }}">&#9733;</button>
+                        {% endfor %}
+                      </div>
+                    </label>
+                    <label>
+                      Comment <span class="field-hint">optional</span>
+                      <textarea name="comment" rows="3" maxlength="500" placeholder="How was the item and the overall experience?"></textarea>
+                    </label>
+                    <label>
+                      Photos <span class="field-hint">optional — up to {{ review_max_images }} images</span>
+                      <div class="file-drop-zone review-file-drop-zone" data-review-drop-zone>
+                        <input type="file" name="images" accept="image/*" class="file-input-hidden" multiple data-review-file-input>
+                        <div class="file-drop-inner" data-review-drop-inner>
+                          <span class="file-drop-icon">📷</span>
+                          <span class="file-drop-text">Click to upload or drag images here</span>
+                          <span class="file-drop-hint">JPG, PNG, WEBP — up to {{ review_max_images }} images</span>
+                        </div>
+                      </div>
+                      <div class="image-preview-grid" data-review-preview-grid></div>
+                      <span class="field-hint" data-review-count-hint></span>
+                    </label>
+                    <div class="action-row">
+                      <button type="submit" class="primary-button">Submit review</button>
+                      <button type="button" class="ghost-button" data-review-cancel-button data-target="review-form-{{ item.id }}">Cancel</button>
+                    </div>
+                  </form>
+                </div>
+              {% endif %}
             </div>
           </article>
         {% endfor %}
@@ -101,6 +164,7 @@
   var statusTextEl = document.getElementById('tracking-status-text');
   var metaEl = document.getElementById('tracking-meta');
   var nodes = progressEl.querySelectorAll('.tracking-node');
+  var reviewGates = document.querySelectorAll('[data-tracking-gate="delivered"]');
 
   function updateTracking(status, updatedAt) {
     if (STEPS.indexOf(status) === -1) return;
@@ -125,6 +189,10 @@
     if (updatedAt) {
       metaEl.textContent = 'Last updated: ' + new Date(updatedAt).toLocaleString();
     }
+
+    if (status === 'delivered') {
+      reviewGates.forEach(function (gate) { gate.hidden = false; });
+    }
   }
 
   function fetchStatus() {
@@ -133,6 +201,7 @@
       .then(function (j) {
         if (j.tracking_status) {
           updateTracking(j.tracking_status, j.tracking_updated_at);
+          if (j.tracking_status === 'delivered') clearInterval(poller);
         }
       })
       .catch(function () {});
@@ -142,7 +211,112 @@
   var initialUpdated = {{ (order.tracking_updated_at.isoformat() | tojson) if order.tracking_updated_at else 'null' }};
   updateTracking(initialStatus, initialUpdated);
   fetchStatus();
-  setInterval(fetchStatus, pollInterval);
+  var poller = setInterval(fetchStatus, pollInterval);
+
+  // ── Per-item "leave a review" panel toggling ─────────────────────────────
+  document.querySelectorAll('[data-review-open-button]').forEach(function (btn) {
+    var panel = document.getElementById(btn.getAttribute('data-target'));
+    if (!panel) return;
+    btn.addEventListener('click', function () {
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  });
+  document.querySelectorAll('[data-review-cancel-button]').forEach(function (btn) {
+    var panel = document.getElementById(btn.getAttribute('data-target'));
+    if (!panel) return;
+    btn.addEventListener('click', function () { panel.hidden = true; });
+  });
+
+  // ── Star rating input ─────────────────────────────────────────────────
+  document.querySelectorAll('[data-star-input]').forEach(function (widget) {
+    var hiddenInput = widget.querySelector('[data-star-input-value]');
+    var stars = Array.prototype.slice.call(widget.querySelectorAll('.star-input__star'));
+
+    function paint(value) {
+      stars.forEach(function (star) {
+        var starValue = parseInt(star.getAttribute('data-star-value'), 10);
+        star.classList.toggle('is-filled', starValue <= value);
+      });
+    }
+
+    stars.forEach(function (star) {
+      var starValue = parseInt(star.getAttribute('data-star-value'), 10);
+      star.addEventListener('click', function () {
+        hiddenInput.value = starValue;
+        paint(starValue);
+      });
+      star.addEventListener('mouseenter', function () { paint(starValue); });
+    });
+    widget.addEventListener('mouseleave', function () { paint(parseInt(hiddenInput.value, 10)); });
+
+    paint(parseInt(hiddenInput.value, 10));
+  });
+
+  // ── Review photo drop zone (mirrors the sell-listing uploader) ──────────
+  document.querySelectorAll('[data-review-drop-zone]').forEach(function (zone) {
+    var panel = zone.closest('.review-form-panel');
+    var inp = zone.querySelector('[data-review-file-input]');
+    var inner = zone.querySelector('[data-review-drop-inner]');
+    var grid = panel.querySelector('[data-review-preview-grid]');
+    var countHint = panel.querySelector('[data-review-count-hint]');
+    var MAX_IMAGES = {{ review_max_images | tojson }};
+    var pendingFiles = [];
+
+    function syncInput() {
+      var dt = new DataTransfer();
+      pendingFiles.forEach(function (file) { dt.items.add(file); });
+      inp.files = dt.files;
+    }
+
+    function renderPreviews() {
+      grid.innerHTML = '';
+      pendingFiles.forEach(function (file, index) {
+        var url = URL.createObjectURL(file);
+        var cell = document.createElement('div');
+        cell.className = 'image-preview-cell';
+        cell.innerHTML =
+          '<img src="' + url + '" alt="">' +
+          '<button type="button" class="image-preview-remove" aria-label="Remove image">&times;</button>';
+        cell.querySelector('.image-preview-remove').addEventListener('click', function () {
+          pendingFiles.splice(index, 1);
+          syncInput();
+          renderPreviews();
+        });
+        grid.appendChild(cell);
+      });
+
+      if (pendingFiles.length) {
+        inner.innerHTML = '<span class="file-drop-icon">\u2705</span><span class="file-drop-text">' + pendingFiles.length + ' photo' + (pendingFiles.length === 1 ? '' : 's') + ' selected</span>';
+      } else {
+        inner.innerHTML = '<span class="file-drop-icon">\ud83d\udcf7</span><span class="file-drop-text">Click to upload or drag images here</span><span class="file-drop-hint">JPG, PNG, WEBP \u2014 up to ' + MAX_IMAGES + ' images</span>';
+      }
+      countHint.textContent = pendingFiles.length ? (pendingFiles.length + ' / ' + MAX_IMAGES + ' images selected') : '';
+    }
+
+    function addFiles(fileList) {
+      var incoming = Array.prototype.slice.call(fileList).filter(function (f) {
+        return f.type.indexOf('image/') === 0;
+      });
+      var room = MAX_IMAGES - pendingFiles.length;
+      if (incoming.length > room) {
+        window.alert('You can add up to ' + MAX_IMAGES + ' photos per review. Only the first ' + Math.max(room, 0) + ' of the new files were added.');
+      }
+      pendingFiles = pendingFiles.concat(incoming.slice(0, Math.max(room, 0)));
+      syncInput();
+      renderPreviews();
+    }
+
+    zone.addEventListener('click', function () { inp.click(); });
+    inp.addEventListener('change', function () { addFiles(inp.files); });
+    zone.addEventListener('dragover', function (e) { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', function () { zone.classList.remove('drag-over'); });
+    zone.addEventListener('drop', function (e) {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      if (e.dataTransfer.files) addFiles(e.dataTransfer.files);
+    });
+  });
 })();
 </script>
 {% endblock %}

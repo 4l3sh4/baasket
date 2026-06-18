@@ -87,15 +87,17 @@
       </div>
 
       <label>
-        Listing image <span class="field-hint">optional</span>
+        Listing photos <span class="field-hint">optional — up to {{ max_images }} images</span>
         <div class="file-drop-zone" id="file-drop-zone">
-          <input type="file" name="image" accept="image/*" id="image-input" class="file-input-hidden">
+          <input type="file" name="images" accept="image/*" id="image-input" class="file-input-hidden" multiple>
           <div class="file-drop-inner" id="file-drop-inner">
             <span class="file-drop-icon">📷</span>
-            <span class="file-drop-text">Click to upload or drag an image here</span>
-            <span class="file-drop-hint">JPG, PNG, WEBP up to 10 MB</span>
+            <span class="file-drop-text">Click to upload or drag images here</span>
+            <span class="file-drop-hint">JPG, PNG, WEBP up to 10 MB each — up to {{ max_images }} images, first photo is the cover</span>
           </div>
         </div>
+        <div class="image-preview-grid" id="image-preview-grid"></div>
+        <span class="field-hint" id="image-count-hint"></span>
       </label>
 
       <label>
@@ -136,11 +138,6 @@
         </div>
       </article>
     </div>
-
-    <div class="panel-note">
-      <h3>Marketplace rules</h3>
-      <p>Listings are built through a single creation path, keeping item data consistent no matter how it enters the market.</p>
-    </div>
   </aside>
 </section>
 
@@ -169,24 +166,64 @@
   var zone  = document.getElementById('file-drop-zone');
   var inp   = document.getElementById('image-input');
   var inner = document.getElementById('file-drop-inner');
+  var grid  = document.getElementById('image-preview-grid');
+  var countHint = document.getElementById('image-count-hint');
+  var MAX_IMAGES = {{ max_images | tojson }};
+  var pendingFiles = [];
+
+  function syncInput() {
+    var dt = new DataTransfer();
+    pendingFiles.forEach(function (file) { dt.items.add(file); });
+    inp.files = dt.files;
+  }
+
+  function renderPreviews() {
+    grid.innerHTML = '';
+    pendingFiles.forEach(function (file, index) {
+      var url = URL.createObjectURL(file);
+      var cell = document.createElement('div');
+      cell.className = 'image-preview-cell' + (index === 0 ? ' is-cover' : '');
+      cell.innerHTML =
+        '<img src="' + url + '" alt="">' +
+        (index === 0 ? '<span class="image-preview-badge">Cover</span>' : '') +
+        '<button type="button" class="image-preview-remove" aria-label="Remove image">&times;</button>';
+      cell.querySelector('.image-preview-remove').addEventListener('click', function () {
+        pendingFiles.splice(index, 1);
+        syncInput();
+        renderPreviews();
+      });
+      grid.appendChild(cell);
+    });
+
+    if (pendingFiles.length) {
+      inner.innerHTML = '<span class="file-drop-icon">\u2705</span><span class="file-drop-text">' + pendingFiles.length + ' photo' + (pendingFiles.length === 1 ? '' : 's') + ' selected</span>';
+    } else {
+      inner.innerHTML = '<span class="file-drop-icon">\ud83d\udcf7</span><span class="file-drop-text">Click to upload or drag images here</span><span class="file-drop-hint">JPG, PNG, WEBP up to 10 MB each — up to ' + MAX_IMAGES + ' images, first photo is the cover</span>';
+    }
+    countHint.textContent = pendingFiles.length ? (pendingFiles.length + ' / ' + MAX_IMAGES + ' images selected') : '';
+  }
+
+  function addFiles(fileList) {
+    var incoming = Array.prototype.slice.call(fileList).filter(function (f) {
+      return f.type.indexOf('image/') === 0;
+    });
+    var room = MAX_IMAGES - pendingFiles.length;
+    if (incoming.length > room) {
+      window.alert('You can add up to ' + MAX_IMAGES + ' images per listing. Only the first ' + Math.max(room, 0) + ' of the new files were added.');
+    }
+    pendingFiles = pendingFiles.concat(incoming.slice(0, Math.max(room, 0)));
+    syncInput();
+    renderPreviews();
+  }
 
   zone.addEventListener('click', function () { inp.click(); });
-  inp.addEventListener('change', function () {
-    if (inp.files && inp.files[0]) {
-      inner.innerHTML = '<span class="file-drop-icon">\u2705</span><span class="file-drop-text">' + inp.files[0].name + '</span>';
-    }
-  });
+  inp.addEventListener('change', function () { addFiles(inp.files); });
   zone.addEventListener('dragover', function (e) { e.preventDefault(); zone.classList.add('drag-over'); });
   zone.addEventListener('dragleave', function () { zone.classList.remove('drag-over'); });
   zone.addEventListener('drop', function (e) {
     e.preventDefault();
     zone.classList.remove('drag-over');
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      var dt = new DataTransfer();
-      dt.items.add(e.dataTransfer.files[0]);
-      inp.files = dt.files;
-      inner.innerHTML = '<span class="file-drop-icon">\u2705</span><span class="file-drop-text">' + e.dataTransfer.files[0].name + '</span>';
-    }
+    if (e.dataTransfer.files) addFiles(e.dataTransfer.files);
   });
 })();
 </script>
