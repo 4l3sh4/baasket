@@ -3,8 +3,8 @@
 {% block content %}
 <section class="card-surface reveal shipping-detail" data-reveal>
   <div class="section-heading compact">
-    <p class="eyebrow">Shipping</p>
-    <h1>Shipping {{ shipping.reference }}</h1>
+    <p class="eyebrow">Tracking</p>
+    <h1>Tracking {{ shipping.reference }}</h1>
     <p>Placed on {{ shipping.created_at.strftime('%b %d, %Y %H:%M') }}</p>
   </div>
 
@@ -28,38 +28,78 @@
   </div>
 
   <div class="panel-note receipt-note tracking-panel">
-    <h2>Tracking</h2>
+    <h2>{% if shipping.is_meetup %}Meet-up status{% else %}Tracking{% endif %}</h2>
 
-    <div class="tracking-progress" id="tracking-progress" data-status="{{ shipping.tracking_status }}">
-      <div class="tracking-progress__track">
-        <div class="tracking-progress__fill" id="tracking-fill"></div>
+    {% if shipping.is_meetup %}
+      {# ── Meet-up status: simple two-step indicator ────────────────────── #}
+      <div class="tracking-progress meetup-progress">
+        <div class="tracking-progress__track">
+          <div class="tracking-progress__fill"
+               style="width: {% if shipping.tracking_status == 'delivered' %}100{% else %}0{% endif %}%;"></div>
+        </div>
+        <ol class="tracking-progress__nodes">
+          <li class="tracking-node {% if shipping.tracking_status in ('meetup_pending', 'delivered') %}is-active{% endif %}" data-step="meetup_pending">
+            <span class="tracking-node__dot" aria-hidden="true">🤝</span>
+            <span class="tracking-node__label">Awaiting Meetup</span>
+          </li>
+          <li class="tracking-node {% if shipping.tracking_status == 'delivered' %}is-active{% endif %}" data-step="delivered">
+            <span class="tracking-node__dot" aria-hidden="true">✅</span>
+            <span class="tracking-node__label">Item Received</span>
+          </li>
+        </ol>
       </div>
-      <ol class="tracking-progress__nodes">
-        <li class="tracking-node" data-step="paid">
-          <span class="tracking-node__dot" aria-hidden="true">💳</span>
-          <span class="tracking-node__label">Paid</span>
-        </li>
-        <li class="tracking-node" data-step="packed">
-          <span class="tracking-node__dot" aria-hidden="true">📦</span>
-          <span class="tracking-node__label">Packed</span>
-        </li>
-        <li class="tracking-node" data-step="shipped">
-          <span class="tracking-node__dot" aria-hidden="true">🚚</span>
-          <span class="tracking-node__label">Shipped</span>
-        </li>
-        <li class="tracking-node" data-step="delivered">
-          <span class="tracking-node__dot" aria-hidden="true">✅</span>
-          <span class="tracking-node__label">Delivered</span>
-        </li>
-      </ol>
-    </div>
 
-    <p class="tracking-status-text" id="tracking-status-text"></p>
-    <p class="tracking-meta" id="tracking-meta"></p>
+      {% if shipping.tracking_status != 'delivered' and shipping.buyer_id == current_user.id %}
+        <p style="margin-top:12px; font-size:0.9em; color:var(--clr-text-muted);">
+          Once you've collected the item from the seller, confirm receipt below to unlock your review.
+        </p>
+        <form method="post" action="{{ url_for('mark_received', shipping_id=shipping.id) }}" style="margin-top:12px;">
+          <button type="submit" class="primary-button"
+            onclick="return confirm('Confirm that you have received this item from the seller?')">
+            Item Received
+          </button>
+        </form>
+      {% elif shipping.tracking_status == 'delivered' %}
+        <p style="margin-top:12px; font-size:0.9em; color:var(--clr-text-muted);">
+          Receipt confirmed
+          {% if shipping.tracking_updated_at %} on {{ shipping.tracking_updated_at.strftime('%b %d, %Y') }}{% endif %}.
+          You can now leave a review below.
+        </p>
+      {% endif %}
+
+    {% else %}
+      {# ── Standard delivery tracking: 4-step progress bar ─────────────── #}
+      <div class="tracking-progress" id="tracking-progress" data-status="{{ shipping.tracking_status }}">
+        <div class="tracking-progress__track">
+          <div class="tracking-progress__fill" id="tracking-fill"></div>
+        </div>
+        <ol class="tracking-progress__nodes">
+          <li class="tracking-node" data-step="paid">
+            <span class="tracking-node__dot" aria-hidden="true">💳</span>
+            <span class="tracking-node__label">Paid</span>
+          </li>
+          <li class="tracking-node" data-step="packed">
+            <span class="tracking-node__dot" aria-hidden="true">📦</span>
+            <span class="tracking-node__label">Packed</span>
+          </li>
+          <li class="tracking-node" data-step="shipped">
+            <span class="tracking-node__dot" aria-hidden="true">🚚</span>
+            <span class="tracking-node__label">Shipped</span>
+          </li>
+          <li class="tracking-node" data-step="delivered">
+            <span class="tracking-node__dot" aria-hidden="true">✅</span>
+            <span class="tracking-node__label">Delivered</span>
+          </li>
+        </ol>
+      </div>
+
+      <p class="tracking-status-text" id="tracking-status-text"></p>
+      <p class="tracking-meta" id="tracking-meta"></p>
+    {% endif %}
   </div>
 
   <section class="shipping-items-panel">
-    <h2>Shipping details</h2>
+    <h2>Tracking details</h2>
     {% if shipping.items %}
       <div class="shipping-items-list">
         {% for item in shipping.items %}
@@ -160,58 +200,62 @@
   var PROGRESS = { paid: 0, packed: 33.33, shipped: 66.66, delivered: 100 };
 
   var progressEl = document.getElementById('tracking-progress');
-  var fillEl = document.getElementById('tracking-fill');
-  var statusTextEl = document.getElementById('tracking-status-text');
-  var metaEl = document.getElementById('tracking-meta');
-  var nodes = progressEl.querySelectorAll('.tracking-node');
   var reviewGates = document.querySelectorAll('[data-tracking-gate="delivered"]');
 
-  function updateTracking(status, updatedAt) {
-    if (STEPS.indexOf(status) === -1) return;
+  // ── Delivery tracking (only present for non-meetup shippings) ────────────
+  if (progressEl) {
+    var fillEl = document.getElementById('tracking-fill');
+    var statusTextEl = document.getElementById('tracking-status-text');
+    var metaEl = document.getElementById('tracking-meta');
+    var nodes = progressEl.querySelectorAll('.tracking-node');
 
-    var pct = PROGRESS[status];
-    fillEl.style.width = pct + '%';
+    function updateTracking(status, updatedAt) {
+      if (STEPS.indexOf(status) === -1) return;
 
-    var idxStatus = STEPS.indexOf(status);
-    nodes.forEach(function (node) {
-      var step = node.getAttribute('data-step');
-      var idxStep = STEPS.indexOf(step);
-      node.classList.toggle('is-done', idxStep < idxStatus);
-      node.classList.toggle('is-active', idxStep === idxStatus);
-    });
+      var pct = PROGRESS[status];
+      fillEl.style.width = pct + '%';
 
-    statusTextEl.classList.add('is-updating');
-    statusTextEl.textContent = STATUS_MESSAGES[status] || '';
-    window.requestAnimationFrame(function () {
-      statusTextEl.classList.remove('is-updating');
-    });
+      var idxStatus = STEPS.indexOf(status);
+      nodes.forEach(function (node) {
+        var step = node.getAttribute('data-step');
+        var idxStep = STEPS.indexOf(step);
+        node.classList.toggle('is-done', idxStep < idxStatus);
+        node.classList.toggle('is-active', idxStep === idxStatus);
+      });
 
-    if (updatedAt) {
-      metaEl.textContent = 'Last updated: ' + new Date(updatedAt).toLocaleString();
+      statusTextEl.classList.add('is-updating');
+      statusTextEl.textContent = STATUS_MESSAGES[status] || '';
+      window.requestAnimationFrame(function () {
+        statusTextEl.classList.remove('is-updating');
+      });
+
+      if (updatedAt) {
+        metaEl.textContent = 'Last updated: ' + new Date(updatedAt).toLocaleString();
+      }
+
+      if (status === 'delivered') {
+        reviewGates.forEach(function (gate) { gate.hidden = false; });
+      }
     }
 
-    if (status === 'delivered') {
-      reviewGates.forEach(function (gate) { gate.hidden = false; });
+    function fetchStatus() {
+      fetch('/shippings/' + shippingId + '/status')
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j.tracking_status) {
+            updateTracking(j.tracking_status, j.tracking_updated_at);
+            if (j.tracking_status === 'delivered') clearInterval(poller);
+          }
+        })
+        .catch(function () {});
     }
-  }
 
-  function fetchStatus() {
-    fetch('/shippings/' + shippingId + '/status')
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        if (j.tracking_status) {
-          updateTracking(j.tracking_status, j.tracking_updated_at);
-          if (j.tracking_status === 'delivered') clearInterval(poller);
-        }
-      })
-      .catch(function () {});
+    var initialStatus = progressEl.getAttribute('data-status') || 'paid';
+    var initialUpdated = {{ (shipping.tracking_updated_at.isoformat() | tojson) if shipping.tracking_updated_at else 'null' }};
+    updateTracking(initialStatus, initialUpdated);
+    fetchStatus();
+    var poller = setInterval(fetchStatus, pollInterval);
   }
-
-  var initialStatus = progressEl.getAttribute('data-status') || 'paid';
-  var initialUpdated = {{ (shipping.tracking_updated_at.isoformat() | tojson) if shipping.tracking_updated_at else 'null' }};
-  updateTracking(initialStatus, initialUpdated);
-  fetchStatus();
-  var poller = setInterval(fetchStatus, pollInterval);
 
   // ── Per-item "leave a review" panel toggling ─────────────────────────────
   document.querySelectorAll('[data-review-open-button]').forEach(function (btn) {

@@ -14,7 +14,13 @@ from models import Item, Offer, User
 
 
 def get_redeemable_offer(offer_id: int, buyer_id: int) -> Offer | None:
-    """Return an accepted, unredeemed offer the buyer may purchase at offer price."""
+    """Return an accepted, unredeemed offer the buyer may purchase at offer price.
+
+    Works for both delivery listings (buyable=True) and meet-up-only listings
+    (buyable=False, since buyable only reflects whether a Delivery deal method
+    is attached).  The only hard gate is that the listing must not already have
+    been sold (buyer_id is None).
+    """
     offer = db.session.get(Offer, offer_id)
     if offer is None:
         return None
@@ -26,7 +32,7 @@ def get_redeemable_offer(offer_id: int, buyer_id: int) -> Offer | None:
         return None
 
     listing = db.session.get(Item, offer.listing_id)
-    if listing is None or not listing.buyable:
+    if listing is None or listing.buyer_id is not None:
         return None
 
     return offer

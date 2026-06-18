@@ -314,6 +314,10 @@ class ShippingModel(db.Model):
     tracking_status = db.Column(db.String(40), nullable=False, default="paid")
     tracking_updated_at = db.Column(db.DateTime, nullable=True)
     offer_id = db.Column(db.Integer, db.ForeignKey("offer.id"), nullable=True, index=True)
+    # True when all items in this shipping were exchanged via Meet Up (no carrier delivery).
+    # Meetup shippings bypass the logistics tracking pipeline and use the
+    # buyer-triggered "Item Received" confirmation instead.
+    is_meetup = db.Column(db.Boolean, nullable=False, default=False)
 
     buyer = db.relationship("User", foreign_keys=[buyer_id], backref="shippings")
     items = db.relationship("ShippingItemModel", backref="shipping", lazy=True, cascade="all, delete-orphan")

@@ -16,18 +16,22 @@
         {% set shipping = entry.shipping %}
         {% set listing = entry.first_listing %}
         {% set first_item = shipping.items[0] if shipping.items else none %}
+        {% set is_meetup = shipping.is_meetup %}
+        {% set is_received = shipping.tracking_status == 'delivered' %}
 
-        <a href="{{ url_for('shipping_detail', shipping_id=shipping.id) }}" class="inbox-row card-surface">
+        <div class="inbox-row card-surface {% if is_meetup and not is_received %}inbox-row--meetup-pending{% endif %}">
 
-          <div class="inbox-thumb-wrap">
+          {# Thumbnail — links to shipping detail #}
+          <a href="{{ url_for('shipping_detail', shipping_id=shipping.id) }}" class="inbox-thumb-wrap" tabindex="-1" aria-hidden="true">
             {% if listing and listing.image_data %}
               <img class="inbox-thumb" src="{{ listing.image_data }}" alt="{{ first_item.title if first_item else 'Shipping item' }}">
             {% else %}
-              <div class="inbox-thumb inbox-thumb--placeholder">🛍️</div>
+              <div class="inbox-thumb inbox-thumb--placeholder">{% if is_meetup %}🤝{% else %}🛍️{% endif %}</div>
             {% endif %}
-          </div>
+          </a>
 
-          <div class="inbox-body">
+          {# Main body — links to shipping detail #}
+          <a href="{{ url_for('shipping_detail', shipping_id=shipping.id) }}" class="inbox-body">
             <div class="inbox-top">
               <div class="inbox-title-group">
                 <span class="inbox-other">
@@ -41,20 +45,38 @@
             </div>
 
             <p class="inbox-preview">
-              Shipping {{ shipping.reference }} · {{ shipping.total_label }}
+              {% if is_meetup %}
+                Meet-up · {{ shipping.reference }} · {{ shipping.total_label }}
+              {% else %}
+                Shipping {{ shipping.reference }} · {{ shipping.total_label }}
+              {% endif %}
             </p>
 
             <span class="inbox-price-tag">{{ shipping.payment_method|upper }}</span>
-          </div>
+          </a>
 
+          {# Status / action column #}
           <div class="inbox-role">
-            <span class="role-chip role-chip--buyer purchase-status-chip purchase-status-chip--{{ shipping.tracking_status }}">
-              {{ status_labels.get(shipping.tracking_status, shipping.tracking_status|title) }}
-            </span>
-            <span class="inbox-arrow">→</span>
+            {% if is_meetup and not is_received %}
+              {# Awaiting meetup: show action button + pending chip #}
+              <span class="role-chip role-chip--buyer purchase-status-chip purchase-status-chip--meetup_pending">
+                {{ status_labels.get('meetup_pending', 'Awaiting Meetup') }}
+              </span>
+              <form method="post" action="{{ url_for('mark_received', shipping_id=shipping.id) }}" style="margin-top:8px;">
+                <button type="submit" class="primary-button primary-button--sm"
+                  onclick="return confirm('Confirm that you have received this item from the seller?')">
+                  Item Received
+                </button>
+              </form>
+            {% else %}
+              <span class="role-chip role-chip--buyer purchase-status-chip purchase-status-chip--{{ shipping.tracking_status }}">
+                {{ status_labels.get(shipping.tracking_status, shipping.tracking_status|title) }}
+              </span>
+              <a href="{{ url_for('shipping_detail', shipping_id=shipping.id) }}" class="inbox-arrow" aria-label="View details">→</a>
+            {% endif %}
           </div>
 
-        </a>
+        </div>
       {% endfor %}
     </div>
 
@@ -62,7 +84,7 @@
     <div class="inbox-empty card-surface">
       <div class="inbox-empty-icon">🛍️</div>
       <h3>No purchases yet</h3>
-      <p>When you buy something from the marketplace, your shippings will appear here.</p>
+      <p>When you buy something from the marketplace, your purchases will appear here.</p>
       <a href="{{ url_for('index') }}" class="primary-button" style="display:inline-flex; margin-top:12px;">Browse listings</a>
     </div>
   {% endif %}

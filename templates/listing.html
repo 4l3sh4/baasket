@@ -382,15 +382,13 @@
   </div>
 
   <div class="listing-grid compact-grid">
-    {% for item in related %}
+    {% for item in related if not item.buyer_id %}
       <article class="product-card reveal" data-reveal>
         <div class="product-image-wrap">
           <a href="{{ url_for('listing_detail', listing_id=item.id) }}">
             <img src="{{ item.image_data }}" alt="{{ item.title }}">
           </a>
-          {% if item.buyer_id %}
-            <span class="badge badge--muted">Sold</span>
-          {% elif item.reserved %}
+          {% if item.reserved %}
             <span class="badge badge--muted">Reserved</span>
           {% endif %}
           {% if current_user.is_authenticated and current_user.id != item.seller_id and not current_user.is_admin %}

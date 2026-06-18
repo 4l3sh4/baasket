@@ -405,6 +405,7 @@ TRACKING_STATUS_LABELS = {
 	"packed": "Preparing shipping",
 	"shipped": "In transit",
 	"delivered": "Completed",
+	"meetup_pending": "Awaiting Meetup",
 }
 
 
@@ -574,14 +575,18 @@ def _featured_listings(limit: int = 4) -> list[Item]:
 
 def _related_listings(listing: Item, limit: int = 3) -> list[Item]:
 	query = (
-		Item.query.filter(Item.id != listing.id, Item.category == listing.category)
+		Item.query.filter(
+			Item.id != listing.id,
+			Item.category == listing.category,
+			Item.buyer_id.is_(None),
+		)
 		.order_by(Item.created_at.desc())
 		.limit(limit)
 	)
 	results = query.all()
 	if len(results) < limit:
 		fallback = (
-			Item.query.filter(Item.id != listing.id)
+			Item.query.filter(Item.id != listing.id, Item.buyer_id.is_(None))
 			.order_by(Item.created_at.desc())
 			.all()
 		)
@@ -911,6 +916,7 @@ def create_app() -> Flask:
 				],
 				"shipping_model": [
 					("buyer_id", "INTEGER"),
+					("is_meetup", "INTEGER DEFAULT 0"),
 				],
 				"review": [
 					("seller_id", "INTEGER"),
@@ -1320,6 +1326,11 @@ def create_app() -> Flask:
 			flash("The listing for this offer is no longer available.", "warning")
 			return redirect(url_for("index"))
 
+		# A listing is meetup-only when it has no Delivery deal methods attached.
+		# In that case the buyer confirms receipt in person rather than waiting for
+		# carrier tracking, so we use a separate status and skip the logistics pipeline.
+		is_meetup_deal = not bool(listing.delivery_methods)
+
 		offer_subtotal = Decimal(str(offer.amount))
 
 		if request.method == "GET":
@@ -1360,22 +1371,32 @@ def create_app() -> Flask:
 			lines=shipping_lines,
 			offer_id=offer.id,
 		)
+
+		if is_meetup_deal:
+			# Mark the shipping as a meetup and set an appropriate initial status.
+			# The listing is marked sold now (so it disappears from browse) but the
+			# buyer must still click "Item Received" to unlock the review.
+			shipping.is_meetup = True
+			shipping.tracking_status = "meetup_pending"
+		
 		_mark_listings_sold(shipping_lines, current_user.id)
 		_notify_sellers_purchase(shipping_lines, notification_subject)
 
-		try:
-			run_checkout_logistics_v2(
-				app=app,
-				shipping_id=shipping.id,
-				buyer_id=current_user.id,
-				buyer_name=buyer_name,
-				buyer_email=buyer_email,
-				payment_method=receipt.strategy_code,
-				receipt=receipt,
-				offer_id=offer.id,
-			)
-		except Exception:
-			pass
+		if not is_meetup_deal:
+			# Only run the delivery logistics pipeline for non-meetup purchases.
+			try:
+				run_checkout_logistics_v2(
+					app=app,
+					shipping_id=shipping.id,
+					buyer_id=current_user.id,
+					buyer_name=buyer_name,
+					buyer_email=buyer_email,
+					payment_method=receipt.strategy_code,
+					receipt=receipt,
+					offer_id=offer.id,
+				)
+			except Exception:
+				pass
 
 		offer.redeemed = True
 		offer.redeemed_at = datetime.utcnow()
@@ -2008,6 +2029,44 @@ def create_app() -> Flask:
 			entries=entries,
 			status_labels=TRACKING_STATUS_LABELS,
 		)
+
+	@app.post("/shippings/<int:shipping_id>/mark-received")
+	@login_required
+	def mark_received(shipping_id: int) -> ResponseReturnValue:
+		"""Buyer confirms they have received a meet-up item.
+
+		This is the meetup equivalent of carrier delivery confirmation:
+		  • sets tracking_status → 'delivered' (unlocks the review form)
+		  • ensures the listing is fully marked as sold (safety net in case
+		    the buyer_id was not set at checkout for any reason)
+		"""
+		shipping = db.session.get(ShippingModel, shipping_id)
+		if shipping is None or shipping.buyer_id != current_user.id:
+			flash("That order could not be found.", "warning")
+			return redirect(url_for("purchases"))
+
+		if not shipping.is_meetup:
+			flash("This action is only available for meet-up orders.", "warning")
+			return redirect(url_for("purchases"))
+
+		if shipping.tracking_status == "delivered":
+			flash("You have already confirmed receipt of this order.", "info")
+			return redirect(url_for("purchases"))
+
+		shipping.tracking_status = "delivered"
+		shipping.tracking_updated_at = datetime.utcnow()
+
+		# Safety net: ensure every listing in this shipping is marked as sold
+		# so it no longer appears in browse / index.
+		for item_row in shipping.items:
+			listing = db.session.get(Item, item_row.listing_id)
+			if listing is not None and listing.buyer_id is None:
+				listing.buyer_id = current_user.id
+				listing.buyable = False
+
+		db.session.commit()
+		flash("Great! You can now leave a review for this purchase.", "success")
+		return redirect(url_for("purchases"))
 
 	@app.get("/admin/reports")
 	@login_required
