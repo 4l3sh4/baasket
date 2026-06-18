@@ -248,7 +248,7 @@ class Offer(db.Model):
         return f"RM{Decimal(self.amount):,.2f}"
 
 
-class OrderModel(db.Model):
+class ShippingModel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     buyer_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
     buyer_name = db.Column(db.String(80), nullable=False)
@@ -265,8 +265,8 @@ class OrderModel(db.Model):
     tracking_updated_at = db.Column(db.DateTime, nullable=True)
     offer_id = db.Column(db.Integer, db.ForeignKey("offer.id"), nullable=True, index=True)
 
-    buyer = db.relationship("User", foreign_keys=[buyer_id], backref="orders")
-    items = db.relationship("OrderItemModel", backref="order", lazy=True, cascade="all, delete-orphan")
+    buyer = db.relationship("User", foreign_keys=[buyer_id], backref="shippings")
+    items = db.relationship("ShippingItemModel", backref="shipping", lazy=True, cascade="all, delete-orphan")
 
     @property
     def subtotal_label(self) -> str:
@@ -281,9 +281,9 @@ class OrderModel(db.Model):
         return f"RM{Decimal(self.total):,.2f}"
 
 
-class OrderItemModel(db.Model):
+class ShippingItemModel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.Integer, db.ForeignKey("order_model.id"), nullable=False, index=True)
+    shipping_id = db.Column(db.Integer, db.ForeignKey("shipping_model.id"), nullable=False, index=True)
     listing_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=False, index=True)
     title = db.Column(db.String(140), nullable=False)
     quantity = db.Column(db.Integer, nullable=False, default=1)
@@ -299,15 +299,15 @@ class OrderItemModel(db.Model):
         return f"RM{Decimal(self.line_total):,.2f}"
 
 
-class OrderTracking(db.Model):
-    __tablename__ = "order_tracking"
+class ShippingTracking(db.Model):
+    __tablename__ = "shipping_tracking"
     id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.Integer, db.ForeignKey("order_model.id"), nullable=False, index=True)
+    shipping_id = db.Column(db.Integer, db.ForeignKey("shipping_model.id"), nullable=False, index=True)
     status = db.Column(db.String(40), nullable=False)
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     meta = db.Column(db.Text, nullable=True)
 
-    order = db.relationship("OrderModel", backref="tracking_history")
+    shipping = db.relationship("ShippingModel", backref="tracking_history")
 
 
 @login_manager.user_loader
@@ -362,17 +362,17 @@ class Review(db.Model):
     listing_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
 
-    # Ties a review to the specific purchase it was left for. order_item_id
-    # is what the "leave a review" button on the order page is keyed on, so
+    # Ties a review to the specific purchase it was left for. shipping_item_id
+    # is what the "leave a review" button on the shipping page is keyed on, so
     # a buyer gets exactly one review per purchased item.
-    order_id = db.Column(db.Integer, db.ForeignKey("order_model.id"), nullable=True, index=True)
-    order_item_id = db.Column(db.Integer, db.ForeignKey("order_item_model.id"), nullable=True, index=True, unique=True)
+    shipping_id = db.Column(db.Integer, db.ForeignKey("shipping_model.id"), nullable=True, index=True)
+    shipping_item_id = db.Column(db.Integer, db.ForeignKey("shipping_item_model.id"), nullable=True, index=True, unique=True)
 
     reviewer = db.relationship("User", foreign_keys=[created_by])
     seller = db.relationship("User", foreign_keys=[seller_id])
     listing = db.relationship("ListingModel", foreign_keys=[listing_id])
-    order = db.relationship("OrderModel", foreign_keys=[order_id])
-    order_item = db.relationship("OrderItemModel", foreign_keys=[order_item_id])
+    shipping = db.relationship("ShippingModel", foreign_keys=[shipping_id])
+    shipping_item = db.relationship("ShippingItemModel", foreign_keys=[shipping_item_id])
     images = db.relationship(
         "ReviewImage",
         backref="review",
@@ -574,18 +574,3 @@ class Notification(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
 
     user = db.relationship("User", foreign_keys=[user_id], backref="notifications")
-
-
-class Shipping(db.Model):
-    __tablename__ = "shipping"
-    shippingID = db.Column(db.String(36), primary_key=True)
-    carrierName = db.Column(db.String(140), nullable=True)
-    trackingNumber = db.Column(db.String(140), nullable=True)
-    estimatedDeliveryDate = db.Column(db.Date, nullable=True)
-
-    def updateTrackingInfo(self, tracking: str) -> bool:
-        self.trackingNumber = tracking
-        return True
-
-    def confirmDelivery(self) -> bool:
-        return True

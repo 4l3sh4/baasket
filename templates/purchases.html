@@ -6,22 +6,22 @@
   <div class="section-heading">
     <div>
       <h2>My purchases</h2>
-      <p>Orders you've placed and their delivery status.</p>
+      <p>Shippings you've placed and their delivery status.</p>
     </div>
   </div>
 
   {% if entries %}
     <div class="inbox-list">
       {% for entry in entries %}
-        {% set order = entry.order %}
+        {% set shipping = entry.shipping %}
         {% set listing = entry.first_listing %}
-        {% set first_item = order.items[0] if order.items else none %}
+        {% set first_item = shipping.items[0] if shipping.items else none %}
 
-        <a href="{{ url_for('order_detail', order_id=order.id) }}" class="inbox-row card-surface">
+        <a href="{{ url_for('shipping_detail', shipping_id=shipping.id) }}" class="inbox-row card-surface">
 
           <div class="inbox-thumb-wrap">
             {% if listing and listing.image_data %}
-              <img class="inbox-thumb" src="{{ listing.image_data }}" alt="{{ first_item.title if first_item else 'Order item' }}">
+              <img class="inbox-thumb" src="{{ listing.image_data }}" alt="{{ first_item.title if first_item else 'Shipping item' }}">
             {% else %}
               <div class="inbox-thumb inbox-thumb--placeholder">🛍️</div>
             {% endif %}
@@ -31,25 +31,25 @@
             <div class="inbox-top">
               <div class="inbox-title-group">
                 <span class="inbox-other">
-                  {% if first_item %}{{ first_item.title }}{% else %}Order {{ order.reference }}{% endif %}
+                  {% if first_item %}{{ first_item.title }}{% else %}Shipping {{ shipping.reference }}{% endif %}
                 </span>
                 {% if entry.extra_count > 0 %}
                   <span class="inbox-listing-name">and {{ entry.extra_count }} more</span>
                 {% endif %}
               </div>
-              <time class="inbox-time">{{ order.created_at.strftime('%b %d, %Y') }}</time>
+              <time class="inbox-time">{{ shipping.created_at.strftime('%b %d, %Y') }}</time>
             </div>
 
             <p class="inbox-preview">
-              Order {{ order.reference }} · {{ order.total_label }}
+              Shipping {{ shipping.reference }} · {{ shipping.total_label }}
             </p>
 
-            <span class="inbox-price-tag">{{ order.payment_method|upper }}</span>
+            <span class="inbox-price-tag">{{ shipping.payment_method|upper }}</span>
           </div>
 
           <div class="inbox-role">
-            <span class="role-chip role-chip--buyer purchase-status-chip purchase-status-chip--{{ order.tracking_status }}">
-              {{ status_labels.get(order.tracking_status, order.tracking_status|title) }}
+            <span class="role-chip role-chip--buyer purchase-status-chip purchase-status-chip--{{ shipping.tracking_status }}">
+              {{ status_labels.get(shipping.tracking_status, shipping.tracking_status|title) }}
             </span>
             <span class="inbox-arrow">→</span>
           </div>
@@ -62,7 +62,7 @@
     <div class="inbox-empty card-surface">
       <div class="inbox-empty-icon">🛍️</div>
       <h3>No purchases yet</h3>
-      <p>When you buy something from the marketplace, your orders will appear here.</p>
+      <p>When you buy something from the marketplace, your shippings will appear here.</p>
       <a href="{{ url_for('index') }}" class="primary-button" style="display:inline-flex; margin-top:12px;">Browse listings</a>
     </div>
   {% endif %}

@@ -8,14 +8,14 @@ from flask import Flask
 
 from logistics_v2.checkout_session import CheckoutSession
 from logistics_v2.factory import wire_standard_observers
-from logistics_v2.order_persistence_observer import OrderPersistenceObserver
+from logistics_v2.shipping_persistence_observer import ShippingPersistenceObserver
 from payment import PaymentReceipt
 
 
 def run_checkout_logistics_v2(
     *,
     app: Flask,
-    order_id: int,
+    shipping_id: int,
     buyer_id: int,
     buyer_name: str,
     buyer_email: str,
@@ -40,10 +40,10 @@ def run_checkout_logistics_v2(
         total=Decimal(receipt.total),
         payment_reference=receipt.reference,
         offer_id=offer_id,
-        order_id=order_id,
+        shipping_id=shipping_id,
     )
 
     wire_standard_observers(session, step_delay_seconds=delay)
-    session.attach(OrderPersistenceObserver(order_id, app))
-    session.confirm_payment(order_id=order_id)
+    session.attach(ShippingPersistenceObserver(shipping_id, app))
+    session.confirm_payment(shipping_id=shipping_id)
     return session

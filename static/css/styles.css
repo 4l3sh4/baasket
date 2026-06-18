@@ -2396,7 +2396,7 @@ h3 {
   }
 }
 
-/* ── Order tracking progress bar ── */
+/* ── Shipping tracking progress bar ── */
 .tracking-panel {
   margin-bottom: 24px;
 }
@@ -2515,7 +2515,7 @@ h3 {
   text-align: center;
 }
 
-.order-items-panel {
+.shipping-items-panel {
   margin: 24px 0;
   padding: 20px;
   border-radius: var(--radius-md);
@@ -2523,18 +2523,18 @@ h3 {
   border: 1px solid var(--line);
 }
 
-.order-items-panel h2 {
+.shipping-items-panel h2 {
   margin: 0 0 14px;
   font-size: 1.1rem;
 }
 
-.order-items-list {
+.shipping-items-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.order-item-row {
+.shipping-item-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2545,13 +2545,13 @@ h3 {
   border: 1px solid var(--line);
 }
 
-.order-item-row--stacked {
+.shipping-item-row--stacked {
   flex-direction: column;
   align-items: stretch;
   gap: 14px;
 }
 
-.order-item-row__top {
+.shipping-item-row__top {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2559,18 +2559,18 @@ h3 {
   width: 100%;
 }
 
-.order-item-row__info h3 {
+.shipping-item-row__info h3 {
   margin: 0 0 4px;
   font-size: 0.95rem;
 }
 
-.order-item-row__info p {
+.shipping-item-row__info p {
   margin: 0;
   font-size: 0.82rem;
   color: var(--muted);
 }
 
-.order-item-row__meta {
+.shipping-item-row__meta {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -2578,12 +2578,12 @@ h3 {
   text-align: right;
 }
 
-.order-item-row__qty {
+.shipping-item-row__qty {
   font-size: 0.78rem;
   color: var(--muted);
 }
 
-.order-items-empty {
+.shipping-items-empty {
   margin: 0;
   color: var(--muted);
   font-size: 0.9rem;
@@ -2604,18 +2604,18 @@ h3 {
     font-size: 0.68rem;
   }
 
-  .order-item-row {
+  .shipping-item-row {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .order-item-row__top {
+  .shipping-item-row__top {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
   }
 
-  .order-item-row__meta {
+  .shipping-item-row__meta {
     align-items: flex-start;
     text-align: left;
   }
@@ -3019,8 +3019,8 @@ h3 {
   color: var(--accent-deep);
 }
 
-/* ── Leave-a-review (order detail page) ─────────────────────────────────── */
-.order-item-review {
+/* ── Leave-a-review (shipping detail page) ─────────────────────────────────── */
+.shipping-item-review {
   width: 100%;
 }
 

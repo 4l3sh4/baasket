@@ -7,14 +7,14 @@ from flask import Flask
 from extensions import db
 from logistics_v2.checkout_session import CheckoutSession
 from logistics_v2.checkout_session_state import CheckoutSessionState, to_tracking_status
-from models import OrderModel, OrderTracking
+from models import ShippingModel, ShippingTracking
 
 
-class OrderPersistenceObserver:
-    """Syncs LogisticsV2 session state into OrderModel / OrderTracking rows."""
+class ShippingPersistenceObserver:
+    """Syncs LogisticsV2 session state into ShippingModel / ShippingTracking rows."""
 
-    def __init__(self, order_id: int, app: Flask) -> None:
-        self.order_id = order_id
+    def __init__(self, shipping_id: int, app: Flask) -> None:
+        self.shipping_id = shipping_id
         self.app = app
 
     def update(
@@ -29,20 +29,20 @@ class OrderPersistenceObserver:
         updated_at = session.tracking_updated_at_utc or session.payment_confirmed_at_utc or datetime.utcnow()
 
         with self.app.app_context():
-            order = db.session.get(OrderModel, self.order_id)
-            if order is None:
+            shipping = db.session.get(ShippingModel, self.shipping_id)
+            if shipping is None:
                 return
 
-            current = order.tracking_status
+            current = shipping.tracking_status
             sequence = ["paid", "packed", "shipped", "delivered"]
             if sequence.index(tracking_status) < sequence.index(current):
                 return
 
-            order.tracking_status = tracking_status
-            order.tracking_updated_at = updated_at
+            shipping.tracking_status = tracking_status
+            shipping.tracking_updated_at = updated_at
             db.session.add(
-                OrderTracking(
-                    order_id=order.id,
+                ShippingTracking(
+                    shipping_id=shipping.id,
                     status=tracking_status,
                     timestamp=updated_at,
                 )

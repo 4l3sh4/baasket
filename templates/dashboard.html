@@ -62,7 +62,7 @@
         </label>
         <label>
           Phone number (optional)
-          <input type="text" name="phone_number" value="{{ current_user.phone_number }}" placeholder="For buyers to contact you about orders">
+          <input type="text" name="phone_number" value="{{ current_user.phone_number }}" placeholder="For buyers to contact you about shippings">
         </label>
         <label>
           New profile image
@@ -242,7 +242,7 @@
         {% endif %}
       </article>
     {% else %}
-      <div class="empty-state wide">You haven&rsquo;t left any reviews yet &mdash; reviews you submit on delivered orders will show up here.</div>
+      <div class="empty-state wide">You haven&rsquo;t left any reviews yet &mdash; reviews you submit on delivered shippings will show up here.</div>
     {% endfor %}
   </div>
 </section>
@@ -293,7 +293,7 @@
   <div class="section-heading">
     <div>
       <h2>Sales history</h2>
-      <p>Completed orders that include your listings.</p>
+      <p>Completed shippings that include your listings.</p>
     </div>
   </div>
 
@@ -303,15 +303,15 @@
         <span class="feed-dot"></span>
         <div>
           <strong>{{ entry.item.title }} · {{ entry.item.line_total_label }}</strong>
-          <p>Order {{ entry.order.reference }} for {{ entry.order.buyer_name }} on {{ entry.order.created_at.strftime('%d %b %Y') }}</p>
+          <p>Shipping {{ entry.shipping.reference }} for {{ entry.shipping.buyer_name }} on {{ entry.shipping.created_at.strftime('%d %b %Y') }}</p>
         </div>
         <div class="dashboard-actions">
           <span class="dashboard-count">Qty {{ entry.item.quantity }}</span>
-          <span class="dashboard-count">{{ entry.order.payment_method }}</span>
+          <span class="dashboard-count">{{ entry.shipping.payment_method }}</span>
         </div>
       </article>
     {% else %}
-      <div class="empty-state wide">No completed sales yet. Paid orders will appear here automatically.</div>
+      <div class="empty-state wide">No completed sales yet. Paid shippings will appear here automatically.</div>
     {% endfor %}
   </div>
 </section>

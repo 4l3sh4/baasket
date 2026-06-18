@@ -16,7 +16,7 @@ from typing import TypedDict
 
 from catalog import _build_art
 from extensions import db, login_manager
-from models import Item, Like, ListingImage, Notification, Offer, OrderItemModel, OrderModel, User, ChatSession, Message, Review, ReviewImage, Report
+from models import Item, Like, ListingImage, Notification, Offer, ShippingItemModel, ShippingModel, User, ChatSession, Message, Review, ReviewImage, Report
 from notifications import build_notification_subject
 from logistics_v2.flask_adapter import run_checkout_logistics_v2
 from offers import OfferBoard, get_redeemable_offer
@@ -274,7 +274,7 @@ def _money(value: object) -> str:
 
 TRACKING_STATUS_LABELS = {
 	"paid": "Processing",
-	"packed": "Preparing order",
+	"packed": "Preparing shipping",
 	"shipped": "In transit",
 	"delivered": "Completed",
 }
@@ -321,53 +321,52 @@ class CartLine(TypedDict):
 	line_total: Decimal
 
 
-class OrderLine(TypedDict):
+class ShippingLine(TypedDict):
 	listing: Item
 	quantity: int
 	line_total: Decimal
 	unit_price: Decimal
 
 
-def _persist_order(
+def _persist_shipping(
 	*,
 	buyer_id: int,
 	buyer_name: str,
 	buyer_email: str,
 	receipt: PaymentReceipt,
 	note: str,
-	lines: list[OrderLine],
-	buyer_id: int | None = None,
+	lines: list[ShippingLine],
 	offer_id: int | None = None,
-) -> OrderModel:
-	order = OrderModel()
-	order.buyer_id = buyer_id
-	order.buyer_name = buyer_name
-	order.buyer_email = buyer_email
-	order.payment_method = receipt.strategy_code
-	order.subtotal = receipt.subtotal
-	order.fee = receipt.fee
-	order.total = receipt.total
-	order.reference = receipt.reference
-	order.note = note
-	order.offer_id = offer_id
-	db.session.add(order)
+) -> ShippingModel:
+	shipping = ShippingModel()
+	shipping.buyer_id = buyer_id
+	shipping.buyer_name = buyer_name
+	shipping.buyer_email = buyer_email
+	shipping.payment_method = receipt.strategy_code
+	shipping.subtotal = receipt.subtotal
+	shipping.fee = receipt.fee
+	shipping.total = receipt.total
+	shipping.reference = receipt.reference
+	shipping.note = note
+	shipping.offer_id = offer_id
+	db.session.add(shipping)
 	db.session.flush()
 
 	for line in lines:
 		listing = line["listing"]
-		order_item = OrderItemModel()
-		order_item.order_id = order.id
-		order_item.listing_id = listing.id
-		order_item.title = listing.title
-		order_item.quantity = line["quantity"]
-		order_item.unit_price = line["unit_price"]
-		order_item.line_total = line["line_total"]
-		db.session.add(order_item)
+		shipping_item = ShippingItemModel()
+		shipping_item.shipping_id = shipping.id
+		shipping_item.listing_id = listing.id
+		shipping_item.title = listing.title
+		shipping_item.quantity = line["quantity"]
+		shipping_item.unit_price = line["unit_price"]
+		shipping_item.line_total = line["line_total"]
+		db.session.add(shipping_item)
 
-	return order
+	return shipping
 
 
-def _notify_sellers_purchase(lines: list[OrderLine], notification_subject: object) -> None:
+def _notify_sellers_purchase(lines: list[ShippingLine], notification_subject: object) -> None:
 	seller_titles: dict[int, list[str]] = {}
 	for line in lines:
 		listing = line["listing"]
@@ -379,7 +378,7 @@ def _notify_sellers_purchase(lines: list[OrderLine], notification_subject: objec
 		})
 
 
-def _mark_listings_sold(lines: list[OrderLine], buyer_id: int) -> None:
+def _mark_listings_sold(lines: list[ShippingLine], buyer_id: int) -> None:
 	for line in lines:
 		listing = line["listing"]
 		listing.buyer_id = buyer_id
@@ -465,11 +464,11 @@ def _related_listings(listing: Item, limit: int = 3) -> list[Item]:
 
 def _seller_profile_stats(seller_id: int) -> dict[str, object]:
 	"""Stats shown on the 'Meet the seller' card. Everything here comes from
-	real rows (listings, orders, reviews) rather than placeholder numbers."""
+	real rows (listings, shippings, reviews) rather than placeholder numbers."""
 	seller = db.session.get(User, seller_id)
 	active_listings = Item.query.filter_by(seller_id=seller_id, buyer_id=None).count()
 	sales_count = (
-		OrderItemModel.query.join(Item, OrderItemModel.listing_id == Item.id)
+		ShippingItemModel.query.join(Item, ShippingItemModel.listing_id == Item.id)
 		.filter(Item.seller_id == seller_id)
 		.count()
 	)
@@ -530,27 +529,27 @@ def _listing_stats_for_user(user_id: int) -> dict[str, int]:
 
 
 def _sales_history_for_user(user_id: int) -> list[dict[str, object]]:
-	order_items = (
-		OrderItemModel.query.join(Item, OrderItemModel.listing_id == Item.id)
-		.join(OrderModel, OrderItemModel.order_id == OrderModel.id)
+	shipping_items = (
+		ShippingItemModel.query.join(Item, ShippingItemModel.listing_id == Item.id)
+		.join(ShippingModel, ShippingItemModel.shipping_id == ShippingModel.id)
 		.filter(Item.seller_id == user_id)
-		.order_by(OrderModel.created_at.desc(), OrderItemModel.id.desc())
+		.order_by(ShippingModel.created_at.desc(), ShippingItemModel.id.desc())
 		.all()
 	)
 	return [
 		{
-			"order": item.order,
+			"shipping": item.shipping,
 			"item": item,
 			"listing": db.session.get(Item, item.listing_id),
 		}
-		for item in order_items
+		for item in shipping_items
 	]
 
 
-def _user_can_view_order(user_id: int, order: OrderModel) -> bool:
-	if order.buyer_id == user_id:
+def _user_can_view_shipping(user_id: int, shipping: ShippingModel) -> bool:
+	if shipping.buyer_id == user_id:
 		return True
-	for item in order.items:
+	for item in shipping.items:
 		listing = db.session.get(Item, item.listing_id)
 		if listing and listing.seller_id == user_id:
 			return True
@@ -558,31 +557,22 @@ def _user_can_view_order(user_id: int, order: OrderModel) -> bool:
 
 
 def _purchase_history_for_user(user_id: int) -> list[dict[str, object]]:
-	orders = (
-		OrderModel.query.filter_by(buyer_id=user_id)
-		.order_by(OrderModel.created_at.desc())
+	shippings = (
+		ShippingModel.query.filter_by(buyer_id=user_id)
+		.order_by(ShippingModel.created_at.desc())
 		.all()
 	)
 	entries: list[dict[str, object]] = []
-	for order in orders:
+	for shipping in shippings:
 		first_listing = None
-		if order.items:
-			first_listing = db.session.get(Item, order.items[0].listing_id)
+		if shipping.items:
+			first_listing = db.session.get(Item, shipping.items[0].listing_id)
 		entries.append({
-			"order": order,
+			"shipping": shipping,
 			"first_listing": first_listing,
-			"extra_count": max(0, len(order.items) - 1),
+			"extra_count": max(0, len(shipping.items) - 1),
 		})
 	return entries
-
-
-def _orders_for_buyer(user_id: int) -> list[OrderModel]:
-	"""All orders placed by this user, current and past, most recent first."""
-	return (
-		OrderModel.query.filter_by(buyer_id=user_id)
-		.order_by(OrderModel.created_at.desc())
-		.all()
-	)
 
 
 def _liked_listings_for_user(user_id: int) -> list[Item]:
@@ -779,7 +769,7 @@ def create_app() -> Flask:
 				],
 				"payment": [
 					("buyer_id", "INTEGER"),
-					("order_id", "INTEGER"),
+					("shipping_id", "INTEGER"),
 					("gateway_reference", "TEXT"),
 					("provider", "TEXT"),
 				],
@@ -788,7 +778,7 @@ def create_app() -> Flask:
 					("is_read", "INTEGER DEFAULT 0"),
 					("related_id", "INTEGER"),
 				],
-				"order_model": [
+				"shipping_model": [
 					("buyer_id", "INTEGER"),
 				],
 				"review": [
@@ -815,27 +805,27 @@ def create_app() -> Flask:
 
 		_ensure_schema_columns()
 
-		def _backfill_order_buyer_ids() -> None:
-			orders = OrderModel.query.filter(OrderModel.buyer_id.is_(None)).all()
+		def _backfill_shipping_buyer_ids() -> None:
+			shippings = ShippingModel.query.filter(ShippingModel.buyer_id.is_(None)).all()
 			changed = False
-			for order in orders:
+			for shipping in shippings:
 				buyer_id = None
-				for item in order.items:
+				for item in shipping.items:
 					listing = db.session.get(Item, item.listing_id)
 					if listing and listing.buyer_id:
 						buyer_id = listing.buyer_id
 						break
-				if buyer_id is None and order.buyer_email:
-					user = User.query.filter(User.email.ilike(order.buyer_email)).first()
+				if buyer_id is None and shipping.buyer_email:
+					user = User.query.filter(User.email.ilike(shipping.buyer_email)).first()
 					if user:
 						buyer_id = user.id
 				if buyer_id:
-					order.buyer_id = buyer_id
+					shipping.buyer_id = buyer_id
 					changed = True
 			if changed:
 				db.session.commit()
 
-		_backfill_order_buyer_ids()
+		_backfill_shipping_buyer_ids()
 
 		# Seed demo data only after the schema is fully migrated, otherwise a
 		# pre-existing database (created before newer columns like
@@ -1103,7 +1093,7 @@ def create_app() -> Flask:
 			items=[line["listing"].title for line in lines],
 		)
 
-		order_lines: list[OrderLine] = [
+		shipping_lines: list[ShippingLine] = [
 			{
 				"listing": line["listing"],
 				"quantity": line["quantity"],
@@ -1112,19 +1102,18 @@ def create_app() -> Flask:
 			}
 			for line in lines
 		]
-		order = _persist_order(
+		shipping = _persist_shipping(
 			buyer_id=current_user.id,
 			buyer_name=buyer_name,
 			buyer_email=buyer_email,
 			receipt=receipt,
 			note=note,
-			lines=order_lines,
-			buyer_id=current_user.id,
+			lines=shipping_lines,
 		)
-		_mark_listings_sold(order_lines, current_user.id)
+		_mark_listings_sold(shipping_lines, current_user.id)
 		db.session.commit()
 
-		_notify_sellers_purchase(order_lines, notification_subject)
+		_notify_sellers_purchase(shipping_lines, notification_subject)
 
 		offer_id_raw = request.form.get("offer_id")
 		offer_id = int(offer_id_raw) if offer_id_raw else None
@@ -1132,7 +1121,7 @@ def create_app() -> Flask:
 		try:
 			run_checkout_logistics_v2(
 				app=app,
-				order_id=order.id,
+				shipping_id=shipping.id,
 				buyer_id=current_user.id,
 				buyer_name=buyer_name,
 				buyer_email=buyer_email,
@@ -1164,7 +1153,7 @@ def create_app() -> Flask:
 			lines=lines,
 			buyer_name=buyer_name,
 			buyer_email=buyer_email,
-			tracking_link=url_for("order_detail", order_id=order.id),
+			tracking_link=url_for("shipping_detail", shipping_id=shipping.id),
 		)
 
 	@app.route("/offers/<int:offer_id>/checkout", methods=["GET", "POST"])
@@ -1208,29 +1197,28 @@ def create_app() -> Flask:
 			items=[listing.title],
 		)
 
-		order_lines: list[OrderLine] = [{
+		shipping_lines: list[ShippingLine] = [{
 			"listing": listing,
 			"quantity": 1,
 			"line_total": offer_subtotal,
 			"unit_price": offer_subtotal,
 		}]
-		order = _persist_order(
+		shipping = _persist_shipping(
 			buyer_id=current_user.id,
 			buyer_name=buyer_name,
 			buyer_email=buyer_email,
 			receipt=receipt,
 			note=note,
-			lines=order_lines,
-			buyer_id=current_user.id,
+			lines=shipping_lines,
 			offer_id=offer.id,
 		)
-		_mark_listings_sold(order_lines, current_user.id)
-		_notify_sellers_purchase(order_lines, notification_subject)
+		_mark_listings_sold(shipping_lines, current_user.id)
+		_notify_sellers_purchase(shipping_lines, notification_subject)
 
 		try:
 			run_checkout_logistics_v2(
 				app=app,
-				order_id=order.id,
+				shipping_id=shipping.id,
 				buyer_id=current_user.id,
 				buyer_name=buyer_name,
 				buyer_email=buyer_email,
@@ -1258,7 +1246,7 @@ def create_app() -> Flask:
 			lines=checkout_lines,
 			buyer_name=buyer_name,
 			buyer_email=buyer_email,
-			tracking_link=url_for("order_detail", order_id=order.id),
+			tracking_link=url_for("shipping_detail", shipping_id=shipping.id),
 		)
 
 	@app.post("/listing/<int:listing_id>/offer")
@@ -1931,78 +1919,68 @@ def create_app() -> Flask:
 		return redirect(url_for("admin_reports"))
 
 
-	@app.get('/orders')
+	@app.get('/shippings/<int:shipping_id>') # logistic
 	@login_required
-	def orders_list() -> ResponseReturnValue:
-		orders = _orders_for_buyer(current_user.id)
-		return render_template(
-			'orders.html',
-			title='Your Orders | Baasket',
-			orders=orders,
-		)
-
-	@app.get('/orders/<int:order_id>') # logistic
-	@login_required
-	def order_detail(order_id: int) -> ResponseReturnValue:
-		order = db.session.get(OrderModel, order_id)
-		if order is None:
-			flash('Order not found', 'warning')
+	def shipping_detail(shipping_id: int) -> ResponseReturnValue:
+		shipping = db.session.get(ShippingModel, shipping_id)
+		if shipping is None:
+			flash('Shipping not found', 'warning')
 			return redirect(url_for('index'))
-		if order.buyer_id is not None and order.buyer_id != current_user.id:
-			flash('You can only view your own orders.', 'warning')
+		if shipping.buyer_id is not None and shipping.buyer_id != current_user.id:
+			flash('You can only view your own shippings.', 'warning')
 			return redirect(url_for('index'))
 
-		order_item_ids = [item.id for item in order.items]
+		shipping_item_ids = [item.id for item in shipping.items]
 		reviews_by_item = {
-			review.order_item_id: review
-			for review in Review.query.filter(Review.order_item_id.in_(order_item_ids)).all()
-		} if order_item_ids else {}
+			review.shipping_item_id: review
+			for review in Review.query.filter(Review.shipping_item_id.in_(shipping_item_ids)).all()
+		} if shipping_item_ids else {}
 
 		return render_template(
-			'order_detail.html',
-			order=order,
-			title='Order Details',
+			'shipping_detail.html',
+			shipping=shipping,
+			title='Shipping Details',
 			reviews_by_item=reviews_by_item,
 			review_max_images=Review.MAX_IMAGES,
 		)
 
 
-	@app.get('/orders/<int:order_id>/status')
+	@app.get('/shippings/<int:shipping_id>/status')
 	@login_required
-	def order_status(order_id: int):
-		order = db.session.get(OrderModel, order_id)
-		if order is None:
+	def shipping_status(shipping_id: int):
+		shipping = db.session.get(ShippingModel, shipping_id)
+		if shipping is None:
 			return {'error': 'not found'}, 404
-		if not _user_can_view_order(current_user.id, order):
+		if not _user_can_view_shipping(current_user.id, shipping):
 			return {'error': 'forbidden'}, 403
 		return {
-			'order_id': order.id,
-			'tracking_status': order.tracking_status,
-			'tracking_updated_at': order.tracking_updated_at.isoformat() if order.tracking_updated_at else None,
+			'shipping_id': shipping.id,
+			'tracking_status': shipping.tracking_status,
+			'tracking_updated_at': shipping.tracking_updated_at.isoformat() if shipping.tracking_updated_at else None,
 		}
 
-	@app.post('/orders/<int:order_id>/items/<int:order_item_id>/review')
+	@app.post('/shippings/<int:shipping_id>/items/<int:shipping_item_id>/review')
 	@login_required
-	def submit_review(order_id: int, order_item_id: int) -> ResponseReturnValue:
-		order = db.session.get(OrderModel, order_id)
-		if order is None:
-			flash('Order not found.', 'warning')
+	def submit_review(shipping_id: int, shipping_item_id: int) -> ResponseReturnValue:
+		shipping = db.session.get(ShippingModel, shipping_id)
+		if shipping is None:
+			flash('Shipping not found.', 'warning')
 			return redirect(url_for('index'))
-		if order.buyer_id is not None and order.buyer_id != current_user.id:
-			flash('You can only review your own orders.', 'warning')
+		if shipping.buyer_id is not None and shipping.buyer_id != current_user.id:
+			flash('You can only review your own shippings.', 'warning')
 			return redirect(url_for('index'))
-		if order.tracking_status != 'delivered':
-			flash('You can leave a review once this order has been delivered.', 'warning')
-			return redirect(url_for('order_detail', order_id=order_id))
+		if shipping.tracking_status != 'delivered':
+			flash('You can leave a review once this shipping has been delivered.', 'warning')
+			return redirect(url_for('shipping_detail', shipping_id=shipping_id))
 
-		order_item = db.session.get(OrderItemModel, order_item_id)
-		if order_item is None or order_item.order_id != order.id:
-			flash('That item could not be found on this order.', 'warning')
-			return redirect(url_for('order_detail', order_id=order_id))
+		shipping_item = db.session.get(ShippingItemModel, shipping_item_id)
+		if shipping_item is None or shipping_item.shipping_id != shipping.id:
+			flash('That item could not be found on this shipping.', 'warning')
+			return redirect(url_for('shipping_detail', shipping_id=shipping_id))
 
-		if Review.query.filter_by(order_item_id=order_item.id).first() is not None:
+		if Review.query.filter_by(shipping_item_id=shipping_item.id).first() is not None:
 			flash('You have already reviewed this item.', 'info')
-			return redirect(url_for('order_detail', order_id=order_id))
+			return redirect(url_for('shipping_detail', shipping_id=shipping_id))
 
 		try:
 			rating = float(request.form.get('rating', ''))
@@ -2011,7 +1989,7 @@ def create_app() -> Flask:
 		rating = max(1, min(5, round(rating)))
 		comment = request.form.get('comment', '').strip()[:500]
 
-		listing = db.session.get(Item, order_item.listing_id)
+		listing = db.session.get(Item, shipping_item.listing_id)
 		uploaded_files = [f for f in request.files.getlist('images') if getattr(f, 'filename', '')]
 		if len(uploaded_files) > Review.MAX_IMAGES:
 			flash(f'You can attach up to {Review.MAX_IMAGES} photos per review — only the first {Review.MAX_IMAGES} were used.', 'warning')
@@ -2024,15 +2002,15 @@ def create_app() -> Flask:
 		review.created_by = current_user.id
 		review.seller_id = listing.seller_id if listing else None
 		review.listing_id = listing.id if listing else None
-		review.order_id = order.id
-		review.order_item_id = order_item.id
+		review.shipping_id = shipping.id
+		review.shipping_item_id = shipping_item.id
 		for position, image_path in enumerate(image_paths):
 			review.images.append(ReviewImage(image_path=image_path, position=position))
 		db.session.add(review)
 		db.session.commit()
 
 		flash('Thanks for your review!', 'success')
-		return redirect(url_for('order_detail', order_id=order_id))
+		return redirect(url_for('shipping_detail', shipping_id=shipping_id))
 
 	return app
 

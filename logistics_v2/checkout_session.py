@@ -31,7 +31,7 @@ class CheckoutSession:
         total: Decimal,
         payment_reference: str,
         offer_id: int | None = None,
-        order_id: int | None = None,
+        shipping_id: int | None = None,
     ) -> None:
         if buyer_id <= 0:
             raise ValueError("buyer_id must be positive")
@@ -46,7 +46,7 @@ class CheckoutSession:
         self.total = total
         self.payment_reference = payment_reference
         self.offer_id = offer_id
-        self.order_id = order_id
+        self.shipping_id = shipping_id
         self.state = CheckoutSessionState.CHECKOUT_STARTED
         self.created_at_utc = datetime.utcnow()
         self.payment_confirmed_at_utc: datetime | None = None
@@ -69,7 +69,7 @@ class CheckoutSession:
         for observer in list(self._observers):
             observer.update(self, previous_state)
 
-    def confirm_payment(self, order_id: int | None = None) -> None:
+    def confirm_payment(self, shipping_id: int | None = None) -> None:
         if self.state is not CheckoutSessionState.CHECKOUT_STARTED:
             raise RuntimeError(
                 f"Payment can only be confirmed from {CheckoutSessionState.CHECKOUT_STARTED}. "
@@ -79,8 +79,8 @@ class CheckoutSession:
         previous_state = self.state
         self.state = CheckoutSessionState.PAYMENT_CONFIRMED
         self.payment_confirmed_at_utc = datetime.utcnow()
-        if order_id is not None:
-            self.order_id = order_id
+        if shipping_id is not None:
+            self.shipping_id = shipping_id
         self.notify(previous_state)
 
     def record_receipt(self, receipt: CheckoutReceipt) -> None:

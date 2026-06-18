@@ -189,7 +189,7 @@
         </details>
         <details class="faq-item">
           <summary>How do I pay safely?</summary>
-          <p>Checkout supports {{ payment_methods|map(attribute='label')|join(', ') }}. Keep payment inside Baasket so your order has a record.</p>
+          <p>Checkout supports {{ payment_methods|map(attribute='label')|join(', ') }}. Keep payment inside Baasket so your shipping has a record.</p>
         </details>
         <details class="faq-item">
           <summary>What if the item isn't as described?</summary>
@@ -341,7 +341,7 @@
       {% endif %}
 
       <div class="buy-perks">
-        <p><strong>Buyer Protection.</strong> Your chat history and order stay linked, so a mismatched item is easy to flag and trace.</p>
+        <p><strong>Buyer Protection.</strong> Your chat history and shipping stay linked, so a mismatched item is easy to flag and trace.</p>
         <p><strong>Flexible payment.</strong> Pay with {{ payment_methods|map(attribute='label')|join(', ') }}.</p>
       </div>
     </div>

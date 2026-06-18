@@ -41,7 +41,7 @@ def display(state: CheckoutSessionState) -> str:
 
 
 def to_tracking_status(state: CheckoutSessionState) -> str | None:
-    """Maps session state to legacy OrderModel.tracking_status values."""
+    """Maps session state to legacy ShippingModel.tracking_status values."""
     return {
         CheckoutSessionState.PAYMENT_CONFIRMED: "paid",
         CheckoutSessionState.PACKED: "packed",
