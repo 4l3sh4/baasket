@@ -660,6 +660,7 @@ def create_app() -> Flask:
 	def inject_globals() -> dict[str, object]:
 		chat_count = 0
 		unread_count = 0
+		report_count = 0
 		if current_user.is_authenticated:
 			chat_count = ChatSession.query.filter(
 				or_(
@@ -670,10 +671,15 @@ def create_app() -> Flask:
 			unread_count = Notification.query.filter_by(
 				user_id=current_user.id, is_read=False
 			).count()
+			if current_user.is_admin:
+				report_count = Report.query.filter_by(
+					received_by=current_user.id
+				).count()
 		return {
 			"cart_count": len(session.get("cart", [])),
 			"chat_count": chat_count,
 			"unread_count": unread_count,
+			"report_count": report_count,
 			"payment_methods": payment_gateway.options(),
 			"brand_logo": url_for("static", filename="assets/logo/baasket_logo.png"),
 		}

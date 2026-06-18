@@ -38,7 +38,12 @@
           {% endif %}
         </a>
         {% if current_user.is_admin %}
-          <a href="{{ url_for('admin_reports') }}">Reports</a>
+          <a href="{{ url_for('admin_reports') }}">
+            Reports
+            {% if report_count and report_count > 0 %}
+              <span class="pill pill--purple">{{ report_count }}</span>
+            {% endif %}
+          </a>
         {% endif %}
         <a href="{{ url_for('logout') }}">Logout</a>
       {% else %}

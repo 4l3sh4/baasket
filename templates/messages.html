@@ -18,7 +18,7 @@
         {% set last_msg = entry.last_message %}
         {% set other = entry.other_party %}
 
-        <a href="{{ url_for('chat_view', chat_id=chat.chatID) }}" class="inbox-row card-surface">
+        <a href="{{ url_for('chat_view', chat_id=chat.chatID) }}" class="inbox-row">
 
           {# Listing thumbnail #}
           <div class="inbox-thumb-wrap">

@@ -1410,43 +1410,70 @@ h3 {
 
 .inbox-list {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .inbox-row {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px 20px;
+  gap: 18px;
+  padding: 18px 22px 18px 26px;
   border-radius: var(--radius-xl);
   text-decoration: none;
   color: var(--ink);
-  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.66);
+  box-shadow: 0 10px 26px rgba(21, 32, 43, 0.07);
+  backdrop-filter: blur(16px);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, border-color 0.18s ease;
   cursor: pointer;
+  overflow: hidden;
+}
+
+.inbox-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 4px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-deep));
+  opacity: 0.55;
+  transition: opacity 0.18s ease;
 }
 
 .inbox-row:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 20px 44px rgba(21, 32, 43, 0.12);
+  transform: translateY(-3px);
+  box-shadow: 0 22px 48px rgba(21, 32, 43, 0.14);
   background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(226, 109, 92, 0.28);
+}
+
+.inbox-row:hover::before {
+  opacity: 1;
 }
 
 .inbox-thumb-wrap {
   flex: none;
+  padding: 3px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(226, 109, 92, 0.22), rgba(31, 111, 120, 0.18));
 }
 
 .inbox-thumb {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
+  width: 68px;
+  height: 68px;
+  border-radius: 15px;
   object-fit: cover;
-  border: 1px solid var(--line);
+  border: 2px solid var(--bg-soft);
   display: block;
 }
 
 .inbox-thumb--placeholder {
   background: rgba(31, 111, 120, 0.08);
-  border: 1px solid rgba(31, 111, 120, 0.14);
+  border: 2px solid var(--bg-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1457,7 +1484,7 @@ h3 {
   flex: 1;
   min-width: 0;
   display: grid;
-  gap: 5px;
+  gap: 6px;
 }
 
 .inbox-top {
@@ -1476,7 +1503,7 @@ h3 {
 
 .inbox-other {
   font-weight: 800;
-  font-size: 1rem;
+  font-size: 1.05rem;
   white-space: nowrap;
 }
 
@@ -1490,13 +1517,14 @@ h3 {
 
 .inbox-time {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 600;
   flex: none;
 }
 
 .inbox-preview {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1510,7 +1538,7 @@ h3 {
 
 .inbox-price-tag {
   display: inline-flex;
-  padding: 2px 9px;
+  padding: 3px 10px;
   border-radius: 999px;
   background: rgba(226, 109, 92, 0.1);
   color: var(--accent-deep);
@@ -1523,7 +1551,7 @@ h3 {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 6px;
+  gap: 10px;
   flex: none;
 }
 
@@ -1552,8 +1580,22 @@ h3 {
 }
 
 .inbox-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(21, 32, 43, 0.05);
   color: var(--muted);
   font-size: 1rem;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.inbox-row:hover .inbox-arrow {
+  background: var(--accent);
+  color: #fff;
+  transform: translateX(2px);
 }
 
 /* Admin report cards — listing/seller summary up top, moderation
@@ -1641,9 +1683,15 @@ h3 {
   color: #1f6f78;
 }
 
+/* Purple pill variant for reports count, matching the admin role chip */
+.pill--purple {
+  background: rgba(139, 92, 230, 0.14);
+  color: #8b5ce6;
+}
+
 @media (max-width: 600px) {
   .inbox-row {
-    padding: 14px 16px;
+    padding: 14px 16px 14px 20px;
     gap: 12px;
   }
 
