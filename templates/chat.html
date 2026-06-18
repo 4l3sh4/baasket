@@ -31,10 +31,17 @@
         {% endfor %}
       {% endif %}
       <div class="chat-participants">
+        {% if current_user.is_admin %}
+          <span class="participant-chip admin-chip">
+            <span class="chip-dot"></span>
+            Admin
+          </span>
+        {% elif current_user.id == chat.buyer_id %}
         <span class="participant-chip buyer-chip">
           <span class="chip-dot"></span>
           Buyer
         </span>
+        {% endif %}
         <span class="participant-divider">↔</span>
         <span class="participant-chip seller-chip">
           <span class="chip-dot"></span>
@@ -152,8 +159,8 @@
         </form>
       </div>
 
-      {# Offer form — only shown to buyer #}
-      {% if current_user.id != chat.seller_id %}
+      {# Offer form — only shown to the buyer, and never to admins #}
+      {% if current_user.id != chat.seller_id and not current_user.is_admin %}
       <div class="control-card card-surface offer-control-card">
         <h3 class="control-title">
           <span class="control-icon">🏷️</span> Send an Offer

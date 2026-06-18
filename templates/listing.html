@@ -1,132 +1,494 @@
 {% extends "base.html" %}
 
+{% macro stars(value) -%}
+{%- set full = value|round|int -%}
+<span class="stars" aria-hidden="true">{% for i in range(5) %}{% if i < full %}<span class="star is-filled">&#9733;</span>{% else %}<span class="star">&#9733;</span>{% endif %}{% endfor %}</span>
+{%- endmacro %}
+
+{% macro offer_chat_buttons(listing) -%}
+{% if current_user.is_authenticated %}
+  {% if not current_user.is_admin %}
+    <form method="post" action="{{ url_for('start_chat', listing_id=listing.id) }}">
+      <button type="submit" class="secondary-button">Make Offer</button>
+    </form>
+  {% endif %}
+  <form method="post" action="{{ url_for('start_chat', listing_id=listing.id) }}">
+    <button type="submit" class="secondary-button">Chat</button>
+  </form>
+{% else %}
+  <a href="{{ url_for('login', next=request.path) }}" class="secondary-button">Make Offer</a>
+  <a href="{{ url_for('login', next=request.path) }}" class="secondary-button">Chat</a>
+{% endif %}
+{%- endmacro %}
+
 {% block content %}
-<section class="detail-grid reveal" data-reveal>
-  <article class="detail-media card-surface">
-    <img src="{{ listing.image_data }}" alt="{{ listing.title }}" class="detail-image">
-  </article>
+{% set is_owner = current_user.is_authenticated and current_user.id == listing.seller_id %}
+{% set is_sold = listing.buyer_id is not none %}
+{% set can_purchase = listing.buyable and not is_sold and not is_owner %}
+{% set gallery = listing.gallery_images %}
 
-  <article class="detail-copy card-surface">
-    <div class="section-heading compact">
-      <p class="eyebrow">{{ listing.category }}</p>
-      <h1>{{ listing.title }}</h1>
-      <p class="product-meta">{{ listing.condition }} · {{ listing.location }} · Sold by <a href="{{ url_for('seller_profile', user_id=listing.seller_id) }}">{{ listing.seller_name }}</a></p>
-    </div>
+<nav class="crumbs reveal" data-reveal aria-label="Breadcrumb">
+  <a href="{{ url_for('index') }}">Home</a>
+  <span class="crumb-sep">&rsaquo;</span>
+  <a href="{{ url_for('browse_category', category=listing.category) }}">{{ listing.category }}</a>
+  {% if listing.subcategory %}
+    <span class="crumb-sep">&rsaquo;</span>
+    <a href="{{ url_for('browse_category', category=listing.category, sub=listing.subcategory) }}">{{ listing.subcategory }}</a>
+  {% endif %}
+</nav>
 
-    <div class="price-row">
-      <strong class="detail-price">{{ listing.price|money }}</strong>
-      <span class="badge">{{ listing.badge }}</span>
-    </div>
+<section class="listing-hero-grid reveal" data-reveal>
+  <div class="listing-main-col">
 
-    <p class="detail-description">{{ listing.description }}</p>
+    <article class="gallery-card card-surface">
+      <div class="gallery-stage">
+        <img src="{{ gallery[0] }}" alt="{{ listing.title }}" class="gallery-main-image" id="gallery-main-image">
 
-    {% if listing.tags %}
-      <div class="tag-row">
-        {% for tag in listing.tags %}
-          <span class="tag">#{{ tag }}</span>
-        {% endfor %}
+        <div class="gallery-actions">
+          {% if not current_user.is_admin %}
+            <button type="button" class="gallery-pill" id="share-button">Share</button>
+          {% endif %}
+          {% if is_owner %}
+            <span class="gallery-pill gallery-pill--static">&hearts; {{ listing.like_count }} like{{ "s" if listing.like_count != 1 else "" }}</span>
+          {% elif current_user.is_admin %}
+            <span class="gallery-pill gallery-pill--static">&hearts; {{ listing.like_count }} like{{ "s" if listing.like_count != 1 else "" }}</span>
+          {% elif current_user.is_authenticated %}
+            {% set is_liked = listing.is_liked_by(current_user) %}
+            <form method="post" action="{{ url_for('toggle_like', listing_id=listing.id) }}" class="like-form">
+              <input type="hidden" name="next" value="{{ request.full_path }}">
+              <button type="submit" class="gallery-pill like-pill {% if is_liked %}is-liked{% endif %}" aria-pressed="{{ 'true' if is_liked else 'false' }}">
+                {{ "♥" if is_liked else "♡" }} {{ listing.like_count }} like{{ "s" if listing.like_count != 1 else "" }}
+              </button>
+            </form>
+          {% else %}
+            <a href="{{ url_for('login', next=request.path) }}" class="gallery-pill">&hearts; {{ listing.like_count }} like{{ "s" if listing.like_count != 1 else "" }}</a>
+          {% endif %}
+          {% if current_user.is_authenticated and not is_owner and not current_user.is_admin %}
+            <button type="button" class="gallery-pill" id="report-open-button">Report</button>
+          {% endif %}
+        </div>
+
+        {% if gallery|length > 1 %}
+          <button type="button" class="gallery-nav gallery-nav--prev" aria-label="Previous image">&lsaquo;</button>
+          <button type="button" class="gallery-nav gallery-nav--next" aria-label="Next image">&rsaquo;</button>
+          <span class="gallery-counter" id="gallery-counter">1 / {{ gallery|length }}</span>
+        {% endif %}
+      </div>
+
+      {% if gallery|length > 1 %}
+        <div class="gallery-thumbs" id="gallery-thumbs">
+          {% for img in gallery %}
+            <button type="button" class="gallery-thumb {% if loop.first %}is-active{% endif %}" data-src="{{ img }}" style="background-image: url('{{ img }}');" aria-label="Show image {{ loop.index }}"></button>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </article>
+
+    {% if current_user.is_authenticated and not is_owner and not current_user.is_admin %}
+      <div class="report-panel card-surface" id="report-panel" hidden>
+        <h3>Report this listing</h3>
+        <form method="post" action="{{ url_for('report_listing', listing_id=listing.id) }}" class="stack-form">
+          <label>
+            Reason
+            <select name="reason">
+              <option>Suspected scam</option>
+              <option>Prohibited item</option>
+              <option>Misleading description</option>
+              <option>Other</option>
+            </select>
+          </label>
+          <label>
+            Details (optional)
+            <textarea name="details" rows="3" placeholder="Tell us what's wrong with this listing"></textarea>
+          </label>
+          <div class="action-row">
+            <button type="submit" class="primary-button">Send report</button>
+            <button type="button" class="ghost-button" id="report-cancel-button">Cancel</button>
+          </div>
+        </form>
       </div>
     {% endif %}
 
-    <div class="action-row">
-      {% if current_user.is_authenticated %}
-        <form method="post" action="{{ url_for('add_to_cart', listing_id=listing.id) }}">
-          <button type="submit" class="primary-button">Add to basket</button>
-        </form>
-      {% else %}
-        <a href="{{ url_for('login', next=request.path) }}" class="primary-button">Sign in to add</a>
-      {% endif %}
-      <a href="#offer-form" class="secondary-button">Make an offer</a>
-      {% if current_user.is_authenticated and current_user.id == listing.seller_id %}
-        <a href="{{ url_for('edit_listing', listing_id=listing.id) }}" class="secondary-button">Edit listing</a>
-      {% endif %}
-    </div>
-
-    <div class="mini-grid">
-      <article>
-        <span>Condition</span>
-        <strong>{{ listing.condition }}</strong>
-      </article>
-      <article>
-        <span>Location</span>
-        <strong>{{ listing.location }}</strong>
-      </article>
-      {% if listing.default_deal_method %}
-      <article>
-        <span>Deal method</span>
-        <strong>
-          {% if listing.default_deal_method.methodType == 'meetup' %}
-            Meet-up{% if listing.default_deal_method.meetupLocation %} · {{ listing.default_deal_method.meetupLocation }}{% endif %}
-          {% else %}
-            Mailing{% if listing.default_deal_method.carrierName %} · {{ listing.default_deal_method.carrierName }}{% endif %}
-          {% endif %}
-        </strong>
-      </article>
-      {% endif %}
-      <article>
-        <span>Seller</span>
-        <strong><a href="{{ url_for('seller_profile', user_id=listing.seller_id) }}">{{ listing.seller_name }}</a></strong>
-      </article>
-    </div>
-  </article>
-</section>
-
-<section class="section-block">
-  <article class="card-surface reveal" data-reveal>
-    <div class="section-heading compact">
-      <h2>Start a chat</h2>
-      <p>Start a private chat with the seller to negotiate and send offers.</p>
-    </div>
-
-    <div class="stack-form">
-      {% if current_user.is_authenticated %}
-        {% if current_user.id != listing.seller_id %}
-          <form method="post" action="{{ url_for('start_chat', listing_id=listing.id) }}">
-            <button type="submit" class="primary-button">Start a chat</button>
-          </form>
-        {% else %}
-          <p class="info">You cannot start a chat on your own listing.</p>
+    <article class="card-surface listing-block">
+      <div class="badge-row">
+        <span class="badge">&#128737; Buyer Protection</span>
+        {% if is_sold %}
+          <span class="badge badge--muted">Sold</span>
+        {% elif listing.reserved %}
+          <span class="badge badge--muted">Reserved</span>
         {% endif %}
-      {% else %}
-        <a href="{{ url_for('login', next=request.path) }}" class="primary-button">Sign in to start a chat</a>
-      {% endif %}
-    </div>
-  </article>
+      </div>
 
+      <p class="eyebrow">{{ listing.category }}{% if listing.subcategory %} &middot; {{ listing.subcategory }}{% endif %}</p>
+      <h1>{{ listing.title }}</h1>
+
+      <div class="price-row listing-price-row">
+        <strong class="detail-price">{{ listing.price|money }}</strong>
+      </div>
+      <p class="subtle">&#127991;&#65039; {{ "Listing price is fixed" if listing.buyable else "Not currently available for purchase" }}</p>
+
+      <div class="action-row listing-secondary-actions">
+        {% if is_owner %}
+          <a href="{{ url_for('edit_listing', listing_id=listing.id) }}" class="secondary-button">Edit listing</a>
+        {% else %}
+          {{ offer_chat_buttons(listing) }}
+        {% endif %}
+      </div>
+    </article>
+
+    <article class="card-surface listing-block">
+      <h2>Details</h2>
+      <div class="mini-grid mini-grid--4">
+        <article>
+          <span>Condition</span>
+          <strong>{{ listing.condition }}</strong>
+        </article>
+        <article>
+          <span>Category</span>
+          <strong>{{ listing.category }}</strong>
+        </article>
+        <article>
+          <span>Subcategory</span>
+          <strong>{{ listing.subcategory or "&mdash;" }}</strong>
+        </article>
+        <article>
+          <span>Listed</span>
+          <strong>{{ listing.listed_date|timeago }}</strong>
+        </article>
+      </div>
+    </article>
+
+    <article class="card-surface listing-block">
+      <h2>Description</h2>
+      {% if listing.description|length > 220 %}
+        <p class="detail-description">{{ listing.description[:220] }}&hellip;</p>
+        <details class="read-more-details">
+          <summary>Read more</summary>
+          <p>{{ listing.description[220:] }}</p>
+        </details>
+      {% else %}
+        <p class="detail-description">{{ listing.description }}</p>
+      {% endif %}
+    </article>
+
+    <article class="card-surface listing-block">
+      <h2>Deal method</h2>
+      {% if listing.default_deal_method %}
+        <div class="seller-context">
+          <span><strong>{% if listing.default_deal_method.methodType == 'meetup' %}Meet-up{% else %}Mailing{% endif %}</strong></span>
+          <span>{% if listing.default_deal_method.price %}RM{{ '%.2f'|format(listing.default_deal_method.price) }}{% else %}Free{% endif %}</span>
+        </div>
+        <p class="subtle" style="margin-top:10px;">
+          {% if listing.default_deal_method.methodType == 'meetup' %}
+            {{ listing.default_deal_method.meetupLocation or listing.location or "Local pickup" }}
+          {% else %}
+            {{ listing.default_deal_method.carrierName or "Baasket Logistics" }}
+          {% endif %}
+        </p>
+      {% else %}
+        <div class="seller-context">
+          <span><strong>Meet-up</strong></span>
+          <span>Free</span>
+        </div>
+        <p class="subtle" style="margin-top:10px;">{{ listing.location or "Local pickup" }}</p>
+      {% endif %}
+    </article>
+
+    <article class="card-surface listing-block">
+      <h2>FAQ</h2>
+      <div class="faq-list">
+        <details class="faq-item">
+          <summary>Is the price negotiable?</summary>
+          <p>Tap Make Offer to suggest a price &mdash; the seller can accept, decline, or counter right inside chat.</p>
+        </details>
+        <details class="faq-item">
+          <summary>How do I pay safely?</summary>
+          <p>Checkout supports {{ payment_methods|map(attribute='label')|join(', ') }}. Keep payment inside Baasket so your order has a record.</p>
+        </details>
+        <details class="faq-item">
+          <summary>What if the item isn't as described?</summary>
+          <p>Message the seller in chat first to sort it out. If that doesn't help, use the Report button above to flag it to the Baasket team.</p>
+        </details>
+      </div>
+    </article>
+
+    <article class="card-surface listing-block seller-block">
+      <h2>Meet the seller</h2>
+      <div class="seller-profile-row">
+        {% if listing.seller %}
+          <a href="{{ url_for('user_profile', user_id=listing.seller.id) }}" class="avatar-link">
+            <img src="{{ listing.seller.profile_image_url }}" alt="{{ listing.seller_name }}" class="avatar-md">
+          </a>
+        {% else %}
+          <img src="/static/assets/logo/baasket_logo.png" alt="{{ listing.seller_name }}" class="avatar-md">
+        {% endif %}
+        <div>
+          <h3>{{ listing.seller_name }}</h3>
+          <div class="rating-row">
+            {{ stars(seller_stats.rating_avg) }}
+            <span class="subtle">
+              {% if seller_stats.rating_count %}
+                {{ "%.1f"|format(seller_stats.rating_avg) }} &middot; {{ seller_stats.rating_count }} review{{ "s" if seller_stats.rating_count != 1 else "" }}
+              {% else %}
+                New seller &mdash; no reviews yet
+              {% endif %}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mini-grid mini-grid--4">
+        <article>
+          <strong>{{ seller_stats.active_listings }}</strong>
+          <span>active listings</span>
+        </article>
+        <article>
+          <strong>{{ seller_stats.sales_count }}</strong>
+          <span>completed sales</span>
+        </article>
+        <article>
+          <strong>{{ seller_stats.rating_count }}</strong>
+          <span>reviews</span>
+        </article>
+        <article>
+          <strong>{{ seller_stats.member_since }}</strong>
+          <span>member since</span>
+        </article>
+      </div>
+
+      {% if not is_owner %}
+        <div class="action-row listing-secondary-actions">
+          {{ offer_chat_buttons(listing) }}
+        </div>
+      {% endif %}
+    </article>
+
+    {% if seller_reviews %}
+      <article class="card-surface listing-block">
+        <div class="section-heading">
+          <h2>Reviews for {{ listing.seller_name }}</h2>
+          <div class="rating-row">
+            {{ stars(seller_stats.rating_avg) }}
+            <strong>{{ "%.1f"|format(seller_stats.rating_avg) }}</strong>
+            <span class="subtle">({{ seller_stats.rating_count }})</span>
+          </div>
+        </div>
+
+        <div class="reviews-list">
+          {% for review in seller_reviews %}
+            <article class="review-card">
+              <div class="review-head">
+                {% if review.reviewer %}
+                  <a href="{{ url_for('user_profile', user_id=review.reviewer.id) }}" class="avatar-link">
+                    <img src="{{ review.reviewer.profile_image_url }}" alt="{{ review.reviewer.username }}" class="avatar-sm">
+                  </a>
+                {% else %}
+                  <img src="/static/assets/logo/baasket_logo.png" alt="" class="avatar-sm">
+                {% endif %}
+                <div>
+                  <strong>{{ review.reviewer_name }}</strong>
+                  <p class="review-meta">{{ review.created_at|timeago }}</p>
+                </div>
+              </div>
+              {{ stars(review.ratingValue) }}
+              <p class="review-comment">{{ review.comment }}</p>
+              {% if review.listing %}
+                <p class="review-item-tag">On: {{ review.listing.title }}</p>
+              {% endif %}
+            </article>
+          {% endfor %}
+        </div>
+      </article>
+    {% endif %}
+
+  </div>
+
+  <aside class="listing-buy-col">
+    <div class="buy-card card-surface">
+      <div class="buy-card-seller-row">
+        {% if listing.seller %}
+          <a href="{{ url_for('user_profile', user_id=listing.seller.id) }}" class="avatar-link">
+            <img src="{{ listing.seller.profile_image_url }}" alt="{{ listing.seller_name }}" class="avatar-sm">
+          </a>
+        {% else %}
+          <img src="/static/assets/logo/baasket_logo.png" alt="{{ listing.seller_name }}" class="avatar-sm">
+        {% endif %}
+        <div>
+          <strong>{{ listing.seller_name }}</strong>
+          <div class="rating-row">
+            {{ stars(seller_stats.rating_avg) }}
+            <span class="subtle">
+              {% if seller_stats.rating_count %}{{ "%.1f"|format(seller_stats.rating_avg) }}{% else %}New{% endif %}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="buy-price-row">
+        <strong class="detail-price">{{ listing.price|money }}</strong>
+        <span class="gallery-pill gallery-pill--static" style="background: rgba(21,32,43,0.08); color: var(--muted);">&hearts; {{ listing.like_count }}</span>
+      </div>
+
+      {% if is_owner %}
+        <p class="subtle">This is your listing.</p>
+        <a href="{{ url_for('edit_listing', listing_id=listing.id) }}" class="primary-button" style="display:block; text-align:center;">Edit listing</a>
+      {% elif is_sold %}
+        <p class="subtle">This item has already been sold.</p>
+      {% elif not listing.buyable %}
+        <p class="subtle">{{ "Reserved for another buyer right now." if listing.reserved else "Not available for direct purchase right now." }}</p>
+      {% elif current_user.is_authenticated and current_user.is_admin %}
+        <p class="subtle">Admin accounts can't buy listings.</p>
+      {% else %}
+        <div class="buy-actions">
+          {% if current_user.is_authenticated %}
+            <form method="post" action="{{ url_for('add_to_cart', listing_id=listing.id) }}">
+              <button type="submit" class="primary-button">Buy</button>
+            </form>
+            <form method="post" action="{{ url_for('add_to_cart', listing_id=listing.id) }}">
+              <button type="submit" class="secondary-button">Add to Cart</button>
+            </form>
+          {% else %}
+            <a href="{{ url_for('login', next=request.path) }}" class="primary-button">Buy</a>
+            <a href="{{ url_for('login', next=request.path) }}" class="secondary-button">Add to Cart</a>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      <div class="buy-perks">
+        <p><strong>Buyer Protection.</strong> Your chat history and order stay linked, so a mismatched item is easy to flag and trace.</p>
+        <p><strong>Flexible payment.</strong> Pay with {{ payment_methods|map(attribute='label')|join(', ') }}.</p>
+      </div>
+    </div>
+  </aside>
 </section>
+
+{% if search_terms %}
+  <section class="section-block card-surface reveal" data-reveal>
+    <h2>What others also search for</h2>
+    <br>
+    <div class="chip-scroll">
+      {% for term in search_terms %}
+        <a href="{{ url_for('browse_category', category=listing.category, sub=term.sub) if term.sub else url_for('index', q=term.label) }}" class="chip-option">{{ term.label }}</a>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
 
 <section class="section-block">
   <div class="section-heading">
     <div>
-      <h2>Related picks</h2>
-      <p>More items from the same marketplace neighborhood.</p>
+      <h2>Similar listings</h2>
+      <p>More from the {{ listing.category }} category.</p>
     </div>
   </div>
 
   <div class="listing-grid compact-grid">
     {% for item in related %}
       <article class="product-card reveal" data-reveal>
-        <a href="{{ url_for('listing_detail', listing_id=item.id) }}" class="product-image-wrap">
-          <img src="{{ item.image_data }}" alt="{{ item.title }}">
-          <span class="badge">{{ item.badge }}</span>
-        </a>
+        <div class="product-image-wrap">
+          <a href="{{ url_for('listing_detail', listing_id=item.id) }}">
+            <img src="{{ item.image_data }}" alt="{{ item.title }}">
+          </a>
+          {% if item.buyer_id %}
+            <span class="badge badge--muted">Sold</span>
+          {% elif item.reserved %}
+            <span class="badge badge--muted">Reserved</span>
+          {% endif %}
+          {% if current_user.is_authenticated and current_user.id != item.seller_id and not current_user.is_admin %}
+            {% set is_liked = item.is_liked_by(current_user) %}
+            <form method="post" action="{{ url_for('toggle_like', listing_id=item.id) }}" class="like-toggle-form">
+              <input type="hidden" name="next" value="{{ request.full_path }}">
+              <button type="submit" class="like-toggle {% if is_liked %}is-liked{% endif %}" aria-pressed="{{ 'true' if is_liked else 'false' }}" aria-label="{{ 'Remove from your likes' if is_liked else 'Add to your likes' }}">{{ "♥" if is_liked else "♡" }}</button>
+            </form>
+          {% elif not current_user.is_authenticated %}
+            <a href="{{ url_for('login', next=request.path) }}" class="like-toggle" aria-label="Log in to like this listing">&#9825;</a>
+          {% endif %}
+        </div>
         <div class="product-copy">
-          <p class="product-category">{{ item.category }}</p>
-          <h3><a href="{{ url_for('listing_detail', listing_id=item.id) }}">{{ item.title }}</a></h3>
-          <p class="product-meta">{{ item.condition }} · {{ item.location }} · <a href="{{ url_for('seller_profile', user_id=item.seller_id) }}">{{ item.seller_name }}</a></p>
-            <div class="price-row">
-            <strong>{{ item.price|money }}</strong>
-            {% if current_user.is_authenticated %}
-              <form method="post" action="{{ url_for('add_to_cart', listing_id=item.id) }}">
-                <button type="submit" class="ghost-button">Add</button>
-              </form>
+          <div class="product-seller-row">
+            {% if item.seller %}
+              <a href="{{ url_for('user_profile', user_id=item.seller.id) }}" class="avatar-link">
+                <img src="{{ item.seller.profile_image_url }}" alt="{{ item.seller_name }}" class="avatar-xs">
+              </a>
             {% else %}
-              <a href="{{ url_for('login', next=url_for('listing_detail', listing_id=item.id)) }}" class="ghost-button">Add</a>
+              <img src="/static/assets/logo/baasket_logo.png" alt="" class="avatar-xs">
             {% endif %}
+            <span>{{ item.seller_name }}</span>
+            <span class="dot-sep">&middot;</span>
+            <span>{{ item.listed_date|timeago }}</span>
+          </div>
+          <h3><a href="{{ url_for('listing_detail', listing_id=item.id) }}">{{ item.title }}</a></h3>
+          <p class="product-meta">{{ item.condition }} &middot; {{ item.category }}</p>
+          <div class="price-row">
+            <strong>{{ item.price|money }}</strong>
+            <span class="product-likes">&hearts; {{ item.like_count }}</span>
           </div>
         </div>
       </article>
+    {% else %}
+      <div class="empty-state wide">No similar listings yet.</div>
     {% endfor %}
   </div>
 </section>
+
+<script>
+(function () {
+  var stage = document.querySelector(".gallery-stage");
+  if (!stage) return;
+
+  var mainImage = document.getElementById("gallery-main-image");
+  var thumbs = document.querySelectorAll(".gallery-thumb");
+  var counter = document.getElementById("gallery-counter");
+  var prevBtn = stage.querySelector(".gallery-nav--prev");
+  var nextBtn = stage.querySelector(".gallery-nav--next");
+  var total = thumbs.length;
+  var current = 0;
+
+  function showImage(index) {
+    if (!total || !mainImage) return;
+    current = (index + total) % total;
+    mainImage.src = thumbs[current].getAttribute("data-src");
+    thumbs.forEach(function (thumb, i) {
+      thumb.classList.toggle("is-active", i === current);
+    });
+    if (counter) counter.textContent = (current + 1) + " / " + total;
+  }
+
+  thumbs.forEach(function (thumb, i) {
+    thumb.addEventListener("click", function () { showImage(i); });
+  });
+  if (prevBtn) prevBtn.addEventListener("click", function () { showImage(current - 1); });
+  if (nextBtn) nextBtn.addEventListener("click", function () { showImage(current + 1); });
+
+  var shareBtn = document.getElementById("share-button");
+  if (shareBtn) {
+    shareBtn.addEventListener("click", function () {
+      var url = window.location.href;
+      var done = function () {
+        var original = shareBtn.textContent;
+        shareBtn.textContent = "Link copied";
+        window.setTimeout(function () { shareBtn.textContent = original; }, 1800);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done).catch(function () { window.prompt("Copy this link:", url); });
+      } else {
+        window.prompt("Copy this link:", url);
+      }
+    });
+  }
+
+  var reportOpen = document.getElementById("report-open-button");
+  var reportPanel = document.getElementById("report-panel");
+  var reportCancel = document.getElementById("report-cancel-button");
+  if (reportOpen && reportPanel) {
+    reportOpen.addEventListener("click", function () {
+      reportPanel.hidden = !reportPanel.hidden;
+      if (!reportPanel.hidden) reportPanel.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+  if (reportCancel && reportPanel) {
+    reportCancel.addEventListener("click", function () { reportPanel.hidden = true; });
+  }
+})();
+</script>
 {% endblock %}

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
@@ -14,9 +14,12 @@ from sqlalchemy import or_, text
 from werkzeug.utils import secure_filename
 from typing import TypedDict
 
-from catalog import ListingFactory, _build_art, build_seeded_catalog
+from catalog import _build_art
 from extensions import db, login_manager
-from models import Item, Notification, Offer, OrderItemModel, OrderModel, Payment, User, ChatSession, Message, Review, DealMethod, Shipping
+from models import (
+	Item, Like, ListingImage, Notification, Offer, OrderItemModel, OrderModel,
+	Payment, User, ChatSession, Message, Review, ReviewImage, Report, DealMethod, Shipping,
+)
 from notifications import build_notification_subject
 from logistics_v2.flask_adapter import run_checkout_logistics_v2
 from offers import OfferBoard, get_redeemable_offer
@@ -27,6 +30,7 @@ BASE_DIR = Path(__file__).resolve().parent
 INSTANCE_DIR = BASE_DIR / "instance"
 LISTING_UPLOAD_DIR = BASE_DIR / "static" / "uploads" / "listings"
 PROFILE_UPLOAD_DIR = BASE_DIR / "static" / "uploads" / "pfp"
+REVIEW_UPLOAD_DIR = BASE_DIR / "static" / "uploads" / "reviews"
 
 # ── Category / subcategory taxonomy ──────────────────────────────────────────
 CATEGORIES_MAP: dict[str, list[str]] = {
@@ -209,15 +213,14 @@ CATEGORY_ICONS: dict[str, str] = {
 }
 CATEGORY_ICON_FALLBACK = "tech.png"
 
-# Conditions as stored in the database (condition field is VARCHAR(10), so values are truncated)
-# These match what sell.html offers, after the [:10] slice applied in the sell route.
+# Conditions as stored in the databas
 BROWSE_CONDITIONS: list[str] = [
-	"Brand New",   # 9  chars – unchanged
-	"Like New",    # 8  chars – unchanged
-	"Lightly Us",  # truncated from "Lightly Used"
-	"Well Used",   # 9  chars – unchanged
-	"Heavily Us",  # truncated from "Heavily Used"
-	"For Parts",   # 9  chars – unchanged
+	"Brand New",
+	"Like New",
+	"Lightly Used",
+	"Well Used",
+	"Heavily Used",
+	"For Parts",
 ]
 
 
@@ -239,6 +242,7 @@ def _ensure_storage() -> None:
 	INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
 	LISTING_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 	PROFILE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+	REVIEW_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _save_upload(file_storage, folder: Path) -> str | None:
@@ -253,6 +257,19 @@ def _save_upload(file_storage, folder: Path) -> str | None:
 	return f"uploads/{folder.name}/{unique_name}"
 
 
+def _save_uploads(file_storages, folder: Path, limit: int) -> list[str]:
+	"""Save up to `limit` uploaded files (skipping any with no filename) and
+	return their relative static paths, in the same order they were received."""
+	saved: list[str] = []
+	for file_storage in file_storages:
+		if len(saved) >= limit:
+			break
+		saved_path = _save_upload(file_storage, folder)
+		if saved_path:
+			saved.append(saved_path)
+	return saved
+
+
 def _money(value: object) -> str:
 	amount = Decimal(str(value))
 	return f"RM{amount:,.2f}"
@@ -264,6 +281,41 @@ TRACKING_STATUS_LABELS = {
 	"shipped": "In transit",
 	"delivered": "Completed",
 }
+
+
+def _timeago(value: object) -> str:
+	"""Render a datetime as a relative 'x ago' string, e.g. for listing posted
+	times and review timestamps."""
+	if not isinstance(value, datetime):
+		return ""
+	delta = datetime.utcnow() - value
+	seconds = int(delta.total_seconds())
+	if seconds < 60:
+		return "moments ago"
+	minutes = seconds // 60
+	if minutes < 60:
+		return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+	hours = minutes // 60
+	if hours < 24:
+		return f"{hours} hour{'s' if hours != 1 else ''} ago"
+	days = hours // 24
+	if days < 30:
+		return f"{days} day{'s' if days != 1 else ''} ago"
+	months = days // 30
+	if months < 12:
+		return f"{months} month{'s' if months != 1 else ''} ago"
+	years = months // 12
+	return f"{years} year{'s' if years != 1 else ''} ago"
+
+
+def _safe_redirect_target(candidate: str | None, fallback: str) -> str:
+	"""Only follow same-site relative paths from a posted 'next' value (used
+	by the like button so it can return the shopper to whichever grid or
+	detail page they clicked it from); anything else falls back to a
+	known-safe target instead of redirecting off-site."""
+	if candidate and candidate.startswith("/") and not candidate.startswith("//"):
+		return candidate
+	return fallback
 
 
 class CartLine(TypedDict):
@@ -350,37 +402,37 @@ def _mark_listings_sold(lines: list[OrderLine], buyer_id: int) -> None:
 		listing.buyable = False
 
 
-def _recent_offer_activity(limit: int = 8) -> list[dict[str, object]]:
-	entries: list[dict[str, object]] = []
-	for offer in Offer.query.order_by(Offer.created_at.desc()).limit(limit).all():
-		listing = db.session.get(Item, offer.listing_id)
-		title = listing.title if listing else "an item"
-		entries.append({
-			"headline": f"Offer on {title}",
-			"detail": f"{offer.buyer_display} submitted {offer.amount_label}.",
-		})
-	return entries
-
-
 def _create_cart_lines() -> tuple[list[CartLine], Decimal]:
-	cart_ids = [int(listing_id) for listing_id in session.get("cart", [])]
+	raw_ids = session.get("cart", [])
+	cart_ids = [int(listing_id) for listing_id in raw_ids]
 	counts = Counter(cart_ids)
 	lines: list[CartLine] = []
 	subtotal = Decimal("0.00")
+	sellable_ids: set[int] = set()
 
 	for listing_id, quantity in counts.items():
 		listing = db.session.get(Item, listing_id)
-		if listing is None:
+		if listing is None or listing.buyer_id is not None:
+			# Missing or already-sold listings are dropped from the basket
+			# instead of being shown or charged for.
 			continue
+		sellable_ids.add(listing_id)
 		line_total = Decimal(listing.price) * quantity
 		subtotal += line_total
 		lines.append({"listing": listing, "quantity": quantity, "line_total": line_total})
+
+	# Keep the session cart in sync so the basket badge/count and any later
+	# checkout attempt never reference a listing that's no longer available.
+	cleaned_ids = [listing_id for listing_id in cart_ids if listing_id in sellable_ids]
+	if cleaned_ids != cart_ids:
+		session["cart"] = cleaned_ids
+		session.modified = True
 
 	return lines, subtotal
 
 
 def _search_listings(search: str = "", category: str = "") -> list[Item]:
-	query = Item.query
+	query = Item.query.filter(Item.buyer_id.is_(None))
 	if category:
 		query = query.filter(Item.category == category)
 	if search:
@@ -399,7 +451,8 @@ def _search_listings(search: str = "", category: str = "") -> list[Item]:
 
 def _featured_listings(limit: int = 4) -> list[Item]:
 	return (
-		Item.query.order_by(Item.created_at.desc())
+		Item.query.filter(Item.buyer_id.is_(None))
+		.order_by(Item.created_at.desc())
 		.limit(limit)
 		.all()
 	)
@@ -424,6 +477,63 @@ def _related_listings(listing: Item, limit: int = 3) -> list[Item]:
 			if len(results) >= limit:
 				break
 	return results[:limit]
+
+
+def _seller_profile_stats(seller_id: int) -> dict[str, object]:
+	"""Stats shown on the 'Meet the seller' card. Everything here comes from
+	real rows (listings, orders, reviews) rather than placeholder numbers."""
+	seller = db.session.get(User, seller_id)
+	active_listings = Item.query.filter_by(seller_id=seller_id, buyer_id=None).count()
+	sales_count = (
+		OrderItemModel.query.join(Item, OrderItemModel.listing_id == Item.id)
+		.filter(Item.seller_id == seller_id)
+		.count()
+	)
+	reviews = Review.query.filter_by(seller_id=seller_id).all()
+	rating_count = len(reviews)
+	rating_avg = (sum(review.ratingValue for review in reviews) / rating_count) if rating_count else 0.0
+	return {
+		"seller": seller,
+		"active_listings": active_listings,
+		"sales_count": sales_count,
+		"rating_avg": rating_avg,
+		"rating_count": rating_count,
+		"member_since": seller.created_at.strftime("%b %Y") if seller else "",
+	}
+
+
+def _seller_reviews(seller_id: int, limit: int = 5) -> list[Review]:
+	return (
+		Review.query.filter_by(seller_id=seller_id)
+		.order_by(Review.created_at.desc())
+		.limit(limit)
+		.all()
+	)
+
+
+def _related_search_terms(listing: Item, limit: int = 8) -> list[dict[str, str]]:
+	"""Build a small set of taxonomy-derived search suggestions for the
+	'What others also search for' row. Baasket has no search-suggestion log
+	to draw from, so this leans on the category/subcategory tree instead of
+	inventing numbers."""
+	terms: list[dict[str, str]] = []
+	seen: set[str] = set()
+
+	def _add(label: str, sub: str = "") -> None:
+		key = label.casefold().strip()
+		if not key or key in seen:
+			return
+		seen.add(key)
+		terms.append({"label": label, "sub": sub})
+
+	if listing.subcategory:
+		_add(listing.subcategory, listing.subcategory)
+	for sibling in CATEGORIES_MAP.get(listing.category, []):
+		if len(terms) >= limit:
+			break
+		_add(sibling, sibling)
+	_add(listing.category)
+	return terms[:limit]
 
 
 def _listing_stats_for_user(user_id: int) -> dict[str, int]:
@@ -482,6 +592,27 @@ def _purchase_history_for_user(user_id: int) -> list[dict[str, object]]:
 	return entries
 
 
+def _orders_for_buyer(user_id: int) -> list[OrderModel]:
+	"""All orders placed by this user, current and past, most recent first."""
+	return (
+		OrderModel.query.filter_by(buyer_id=user_id)
+		.order_by(OrderModel.created_at.desc())
+		.all()
+	)
+
+
+def _liked_listings_for_user(user_id: int) -> list[Item]:
+	"""A user's own liked items, most recently liked first. Only ever
+	filtered by the requesting user's id — there is no route that exposes
+	*who* liked a listing, so this stays private to each shopper."""
+	return (
+		Item.query.join(Like, Like.listing_id == Item.id)
+		.filter(Like.user_id == user_id)
+		.order_by(Like.created_at.desc())
+		.all()
+	)
+
+
 def _seed_database() -> None:
 	if User.query.count() == 0:
 		demo_user = User()
@@ -489,36 +620,71 @@ def _seed_database() -> None:
 		demo_user.email = "hello@baasket.local"
 		demo_user.bio = "Baasket demo storefront"
 		demo_user.set_password("baasket123")
+		demo_user.role = "user"
 		db.session.add(demo_user)
 		db.session.flush()
 	else:
 		demo_user = User.query.filter_by(username="baasket").first() or User.query.first()
 
-	# Keep demo catalog listings alongside real user listings.
-	if demo_user is not None:
-		existing_titles = {
-			listing.title
-			for listing in Item.query.filter_by(seller_id=demo_user.id).all()
-		}
-		seed_repository = build_seeded_catalog(ListingFactory())
-		for seed_listing in seed_repository.all():
-			if seed_listing.title in existing_titles:
-				continue
-			listing = Item()
-			listing.seller_id = demo_user.id
-			listing.title = seed_listing.title
-			listing.category = seed_listing.category
-			listing.subcategory = seed_listing.subcategory_id
-			listing.price = float(seed_listing.price)
-			listing.condition = seed_listing.condition
-			listing.location = seed_listing.location or "Local pickup"
-			listing.description = seed_listing.description
-			listing.image_path = ""
-			listing.seed_image_data = seed_listing.image_data
-			listing.buyable = seed_listing.buyable
-			listing.reserved = seed_listing.reserved
-			db.session.add(listing)
+	# Demo catalog listings are intentionally not generated here — the
+	# database starts with no listings beyond whatever real users create.
+
+	# Seed a few reviews for the demo storefront so the seller + reviews
+	# sections on the listing page have real content. Reviews are keyed on
+	# seller_id, so a newly registered seller correctly starts with the
+	# "no reviews yet" empty state instead of fake numbers.
+	if demo_user is not None and Review.query.filter_by(seller_id=demo_user.id).count() == 0:
+		demo_reviewers = []
+		for username, email in (
+			("mei_ling87", "mei.ling@example.com"),
+			("arif_hassan", "arif.hassan@example.com"),
+			("teh_aiping", "teh.aiping@example.com"),
+		):
+			reviewer = User.query.filter_by(username=username).first()
+			if reviewer is None:
+				reviewer = User()
+				reviewer.username = username
+				reviewer.email = email
+				reviewer.bio = "Baasket shopper"
+				reviewer.set_password("baasket123")
+				db.session.add(reviewer)
+				db.session.flush()
+			demo_reviewers.append(reviewer)
+
+		demo_listings = Item.query.filter_by(seller_id=demo_user.id).order_by(Item.id).all()
+		seed_reviews = [
+			(5.0, "Item matched the photos exactly and the handover was quick.", 0, 2),
+			(4.5, "Good communication throughout, slightly late to the meetup but worth it.", 1, 10),
+			(5.0, "Second time buying from this seller \u2014 packaging was careful both times.", 2, 25),
+			(4.0, "Fair price and the listing description was accurate.", 0, 40),
+		]
+		for index, (rating, comment, reviewer_idx, days_ago) in enumerate(seed_reviews):
+			review = Review()
+			review.reviewID = uuid4().hex
+			review.ratingValue = rating
+			review.comment = comment
+			review.created_by = demo_reviewers[reviewer_idx % len(demo_reviewers)].id
+			review.seller_id = demo_user.id
+			if demo_listings:
+				review.listing_id = demo_listings[index % len(demo_listings)].id
+			review.created_at = datetime.utcnow() - timedelta(days=days_ago)
+			db.session.add(review)
+
 	db.session.commit()
+
+
+def _authorize_report_action(report_id: str) -> Report | None:
+	"""Shared guard for the two admin report-action routes: only the admin
+	a report was actually routed to may act on it, mirroring the filter
+	already used to build the /admin/reports inbox."""
+	if not current_user.is_admin:
+		flash("That action is only available to admins.", "warning")
+		return None
+	report = db.session.get(Report, report_id)
+	if report is None or report.received_by != current_user.id:
+		flash("That report could not be found.", "warning")
+		return None
+	return report
 
 
 def create_app() -> Flask:
@@ -540,10 +706,15 @@ def create_app() -> Flask:
 	def money_filter(value: object) -> str:
 		return _money(value)
 
+	@app.template_filter("timeago")
+	def timeago_filter(value: object) -> str:
+		return _timeago(value)
+
 	@app.context_processor
 	def inject_globals() -> dict[str, object]:
 		chat_count = 0
 		unread_count = 0
+		report_count = 0
 		if current_user.is_authenticated:
 			chat_count = ChatSession.query.filter(
 				or_(
@@ -554,17 +725,21 @@ def create_app() -> Flask:
 			unread_count = Notification.query.filter_by(
 				user_id=current_user.id, is_read=False
 			).count()
+			if current_user.is_admin:
+				report_count = Report.query.filter_by(
+					received_by=current_user.id
+				).count()
 		return {
 			"cart_count": len(session.get("cart", [])),
 			"chat_count": chat_count,
 			"unread_count": unread_count,
+			"report_count": report_count,
 			"payment_methods": payment_gateway.options(),
 			"brand_logo": url_for("static", filename="assets/logo/baasket_logo.png"),
 		}
 
 	with app.app_context():
 		db.create_all()
-		_seed_database()
 
 		# Ensure chat_session table has the new columns added to the model
 		def _ensure_chat_session_columns():
@@ -598,6 +773,7 @@ def create_app() -> Flask:
 					("phone_number", "TEXT"),
 					("country", "TEXT"),
 					("last_seen", "TEXT"),
+					("role", "TEXT DEFAULT 'user'"),
 				],
 				"listing_model": [
 					("quantity", "INTEGER"),
@@ -605,7 +781,6 @@ def create_app() -> Flask:
 					("is_active", "INTEGER"),
 					("subcategory", "TEXT"),
 					("buyer_id", "INTEGER"),
-					("likes", "INTEGER DEFAULT 0"),
 					("reserved", "INTEGER DEFAULT 0"),
 					("buyable", "INTEGER DEFAULT 1"),
 					("listed_date", "TEXT"),
@@ -639,6 +814,15 @@ def create_app() -> Flask:
 					("order_id", "INTEGER"),
 					("status", "TEXT DEFAULT 'created'"),
 					("delivered_at", "TEXT"),
+				],
+				"review": [
+					("seller_id", "INTEGER"),
+					("listing_id", "INTEGER"),
+					("created_at", "TEXT"),
+				],
+				"report": [
+					("reporter_id", "INTEGER"),
+					("listing_id", "INTEGER"),
 				],
 			}
 
@@ -677,6 +861,11 @@ def create_app() -> Flask:
 
 		_backfill_order_buyer_ids()
 
+		# Seed demo data only after the schema is fully migrated, otherwise a
+		# pre-existing database (created before newer columns like
+		# review.seller_id existed) would fail here with "no such column".
+		_seed_database()
+
 	@app.get("/")
 	def index() -> ResponseReturnValue:
 		search = request.args.get("q", "").strip()
@@ -689,11 +878,9 @@ def create_app() -> Flask:
 			search=search,
 			category=category,
 			listings=listings,
-			featured=_featured_listings(limit=4),
+			featured=_featured_listings(limit=1),
 			categories=list(CATEGORIES_MAP.keys()),
-			listing_count=Item.query.count(),
 			category_list=_build_category_list(),
-			activity_feed=_recent_offer_activity(),
 		)
 
 	@app.get("/listing/<int:listing_id>")
@@ -703,16 +890,24 @@ def create_app() -> Flask:
 			flash("That listing is no longer available.", "warning")
 			return redirect(url_for("index"))
 
+		seller_stats = _seller_profile_stats(listing.seller_id)
+
 		return render_template(
 			"listing.html",
 			title=f"{listing.title} | Baasket",
 			listing=listing,
-			related=_related_listings(listing, limit=3),
+			related=_related_listings(listing, limit=4),
+			seller_stats=seller_stats,
+			seller_reviews=_seller_reviews(listing.seller_id, limit=4),
+			search_terms=_related_search_terms(listing),
 		)
 
 	@app.post("/listing/<int:listing_id>/cart")
 	@login_required
 	def add_to_cart(listing_id: int):
+		if current_user.is_admin:
+			flash("Admin accounts can't buy listings.", "warning")
+			return redirect(url_for("listing_detail", listing_id=listing_id))
 		listing = db.session.get(Item, listing_id)
 		if listing is None:
 			flash("The item you tried to add could not be found.", "warning")
@@ -724,23 +919,120 @@ def create_app() -> Flask:
 		flash(f"{listing.title} was added to your basket.", "success")
 		return redirect(url_for("cart_view"))
 
+	@app.post("/listing/<int:listing_id>/like")
+	@login_required
+	def toggle_like(listing_id: int):
+		listing = db.session.get(Item, listing_id)
+		if listing is None:
+			flash("That listing could not be found.", "warning")
+			return redirect(url_for("index"))
+
+		fallback = url_for("listing_detail", listing_id=listing.id)
+		destination = _safe_redirect_target(request.form.get("next"), fallback)
+
+		if current_user.is_admin:
+			flash("Admin accounts can't like listings.", "warning")
+			return redirect(destination)
+
+		if listing.seller_id == current_user.id:
+			flash("You cannot like your own listing.", "warning")
+			return redirect(destination)
+
+		existing = Like.query.filter_by(user_id=current_user.id, listing_id=listing.id).first()
+		if existing is not None:
+			db.session.delete(existing)
+		else:
+			db.session.add(Like(user_id=current_user.id, listing_id=listing.id))
+		db.session.commit()
+
+		return redirect(destination)
+
+	@app.post("/listing/<int:listing_id>/report")
+	@login_required
+	def report_listing(listing_id: int):
+		listing = db.session.get(Item, listing_id)
+		if listing is None:
+			flash("That listing could not be found.", "warning")
+			return redirect(url_for("index"))
+
+		if current_user.is_admin:
+			flash("Admin accounts can't report listings.", "warning")
+			return redirect(url_for("listing_detail", listing_id=listing_id))
+
+		reason = request.form.get("reason", "").strip() or "Other"
+		details = request.form.get("details", "").strip()[:1000]
+
+		admin = User.query.filter_by(role="admin").first()
+
+		report = Report()
+		report.reportID = uuid4().hex
+		report.reason = reason
+		report.details = details
+		report.received_by = admin.id if admin else None
+		report.reporter_id = current_user.id
+		report.listing_id = listing.id
+		db.session.add(report)
+		db.session.commit()
+
+		if admin is not None:
+			notification_subject.notify("report_received", {
+				"admin_id": admin.id,
+				"report_id": report.reportID,
+				"reporter_name": current_user.username,
+				"reason": reason,
+				"listing_title": listing.title,
+			})
+			db.session.commit()
+
+		flash("Thanks — your report has been sent to the Baasket team.", "success")
+		return redirect(url_for("listing_detail", listing_id=listing_id))
+
+	@app.get("/users/<int:user_id>")
+	def user_profile(user_id: int) -> ResponseReturnValue:
+		"""Public profile for any user — reachable by clicking their profile
+		picture anywhere on the site. Shows their star rating, the reviews
+		they've received, and their current (unsold) listings. This is
+		read-only and separate from /dashboard, which stays private to the
+		logged-in account it belongs to."""
+		profile_user = db.session.get(User, user_id)
+		if profile_user is None:
+			flash("That user could not be found.", "warning")
+			return redirect(url_for("index"))
+
+		current_listings = (
+			Item.query.filter_by(seller_id=profile_user.id, buyer_id=None)
+			.order_by(Item.created_at.desc())
+			.all()
+		)
+
+		return render_template(
+			"user_profile.html",
+			title=f"{profile_user.username} | Baasket",
+			profile_user=profile_user,
+			is_own_profile=current_user.is_authenticated and current_user.id == profile_user.id,
+			seller_stats=_seller_profile_stats(profile_user.id),
+			seller_reviews=_seller_reviews(profile_user.id, limit=20),
+			listings=current_listings,
+		)
+
 	@app.route("/sell", methods=["GET", "POST"])
 	@login_required
 	def sell() -> ResponseReturnValue:
+		if current_user.is_admin:
+			flash("Admin accounts can't create listings.", "warning")
+			return redirect(url_for("index"))
 		if request.method == "POST":
 			title = request.form.get("title", "").strip()[:100]
 			category = request.form.get("category", "").strip()
 			subcategory = request.form.get("subcategory", "").strip()
 			price_text = request.form.get("price", "").strip()
 			condition = request.form.get("condition", "").strip() or "Good"
-			condition = condition[:10]  # enforce VARCHAR(10)
+			condition = condition[:15]  # enforce VARCHAR(10)
 			location = request.form.get("location", "").strip() or "Local pickup"
 			description = request.form.get("description", "").strip()[:1000]
 			buyable  = request.form.get("buyable",  "1") == "1"
 			method_type = request.form.get("method_type", "mailing").strip() or "mailing"
 			carrier_name = request.form.get("carrier_name", "Baasket Logistics").strip() or "Baasket Logistics"
-			image_path = _save_upload(request.files.get("image"), LISTING_UPLOAD_DIR)
-			seed_image_data = "" if image_path else _build_art(title[:24] or category[:24] or "Listing", "#1f6f78", "#e26d5c")
 
 			if not title or not category or not price_text or not description:
 				flash("Title, category, price, and description are required.", "warning")
@@ -760,6 +1052,12 @@ def create_app() -> Flask:
 				flash("Enter a valid asking price.", "warning")
 				return redirect(url_for("sell"))
 
+			uploaded_files = [f for f in request.files.getlist("images") if getattr(f, "filename", "")]
+			if len(uploaded_files) > Item.MAX_IMAGES:
+				flash(f"You can upload up to {Item.MAX_IMAGES} images per listing — only the first {Item.MAX_IMAGES} were used.", "warning")
+			image_paths = _save_uploads(uploaded_files, LISTING_UPLOAD_DIR, Item.MAX_IMAGES)
+			seed_image_data = "" if image_paths else _build_art(title[:24] or category[:24] or "Listing", "#1f6f78", "#e26d5c")
+
 			listing = Item()
 			listing.seller_id = current_user.id
 			listing.title = title
@@ -769,10 +1067,11 @@ def create_app() -> Flask:
 			listing.condition = condition
 			listing.location = location
 			listing.description = description
-			listing.image_path = image_path or ""
+			listing.image_path = ""
 			listing.seed_image_data = seed_image_data
-			listing.likes = 0
 			listing.buyable = buyable
+			for position, image_path in enumerate(image_paths):
+				listing.images.append(ListingImage(image_path=image_path, position=position))
 			db.session.add(listing)
 			db.session.flush()
 
@@ -795,6 +1094,7 @@ def create_app() -> Flask:
 			"sell.html",
 			title="Sell on Baasket",
 			categories_map=CATEGORIES_MAP,
+			max_images=Item.MAX_IMAGES,
 		)
 
 	@app.get("/cart")
@@ -820,6 +1120,9 @@ def create_app() -> Flask:
 	@app.post("/checkout")
 	@login_required
 	def checkout() -> ResponseReturnValue:
+		if current_user.is_admin:
+			flash("Admin accounts can't buy listings.", "warning")
+			return redirect(url_for("cart_view"))
 		lines, subtotal = _create_cart_lines()
 		if not lines:
 			flash("Add a few items before checking out.", "warning")
@@ -905,6 +1208,9 @@ def create_app() -> Flask:
 	@app.route("/offers/<int:offer_id>/checkout", methods=["GET", "POST"])
 	@login_required
 	def offer_checkout(offer_id: int) -> ResponseReturnValue:
+		if current_user.is_admin:
+			flash("Admin accounts can't buy listings.", "warning")
+			return redirect(url_for("notifications_view"))
 		offer = get_redeemable_offer(offer_id, current_user.id)
 		if offer is None:
 			flash("This offer is not available for purchase.", "warning")
@@ -1113,6 +1419,9 @@ def create_app() -> Flask:
 	@app.post("/chat/<string:chat_id>/offer")
 	@login_required
 	def chat_offer(chat_id: str) -> ResponseReturnValue:
+		if current_user.is_admin:
+			flash("Admin accounts can't make offers.", "warning")
+			return redirect(url_for("chat_view", chat_id=chat_id))
 		chat = ChatSession.query.filter_by(chatID=chat_id).first()
 		if chat is None:
 			flash("Invalid chat session.", "warning")
@@ -1233,10 +1542,20 @@ def create_app() -> Flask:
 			user.bio = bio
 			user.profile_image = profile_image or ""
 			user.set_password(password)
+			# The very first real account on the site automatically becomes the
+			# admin. The seeded demo "baasket" account (created on first app
+			# startup, see _seed_database) is deliberately excluded from this
+			# check, so admin status goes to the first person who actually signs
+			# up rather than the demo storefront.
+			if User.query.filter_by(role="admin").first() is None:
+				user.role = "admin"
 			db.session.add(user)
 			db.session.commit()
 			login_user(user)
-			flash("Welcome to Baasket.", "success")
+			if user.is_admin:
+				flash("Welcome to Baasket. You're the first account, so you've been made an admin.", "success")
+			else:
+				flash("Welcome to Baasket.", "success")
 			return redirect(url_for("dashboard"))
 
 		return render_template("register.html", title="Create Account | Baasket")
@@ -1334,8 +1653,20 @@ def create_app() -> Flask:
 		)
 		sales_history = _sales_history_for_user(current_user.id)
 		stats = _listing_stats_for_user(current_user.id)
-		# Total reviews received by the current user
-		reviews_count = Review.query.filter_by(created_by=current_user.id).count()
+		# Reviews other people have left on this user's listings (as a seller)
+		reviews_received = (
+			Review.query.filter_by(seller_id=current_user.id)
+			.order_by(Review.created_at.desc())
+			.all()
+		)
+		# Reviews this user has left on their own purchases (as a buyer)
+		reviews_made = (
+			Review.query.filter_by(created_by=current_user.id)
+			.order_by(Review.created_at.desc())
+			.all()
+		)
+		reviews_count = len(reviews_received)
+		liked_listings = _liked_listings_for_user(current_user.id)
 		return render_template(
 			"dashboard.html",
 			title="Seller Dashboard | Baasket",
@@ -1343,6 +1674,9 @@ def create_app() -> Flask:
 			sales_history=sales_history,
 			stats=stats,
 			reviews_count=reviews_count,
+			reviews_received=reviews_received,
+			reviews_made=reviews_made,
+			liked_listings=liked_listings,
 			category_list=_build_category_list(),
 		)
 
@@ -1400,9 +1734,28 @@ def create_app() -> Flask:
 					flash("Enter a valid price.", "warning")
 					return redirect(url_for("edit_listing", listing_id=listing.id))
 
-			replacement_image = _save_upload(request.files.get("image"), LISTING_UPLOAD_DIR)
-			if replacement_image:
-				listing.image_path = replacement_image
+			# Existing images the seller chose to remove (checkboxes posted as
+			# "remove_image" with the ListingImage id as the value).
+			remove_ids = {int(value) for value in request.form.getlist("remove_image") if value.isdigit()}
+			remaining_images = [img for img in sorted(listing.images, key=lambda i: i.position) if img.id not in remove_ids]
+			for img in list(listing.images):
+				if img.id in remove_ids:
+					listing.images.remove(img)
+					db.session.delete(img)
+
+			new_files = [f for f in request.files.getlist("images") if getattr(f, "filename", "")]
+			available_slots = max(0, Item.MAX_IMAGES - len(remaining_images))
+			if len(new_files) > available_slots:
+				flash(f"A listing can have at most {Item.MAX_IMAGES} images — some new photos were not added.", "warning")
+			new_paths = _save_uploads(new_files, LISTING_UPLOAD_DIR, available_slots)
+
+			for position, img in enumerate(remaining_images):
+				img.position = position
+			next_position = len(remaining_images)
+			for offset, image_path in enumerate(new_paths):
+				listing.images.append(ListingImage(image_path=image_path, position=next_position + offset))
+
+			if listing.images:
 				listing.seed_image_data = ""
 
 			db.session.commit()
@@ -1414,6 +1767,7 @@ def create_app() -> Flask:
 			title="Edit Listing | Baasket",
 			listing=listing,
 			categories_map=CATEGORIES_MAP,
+			max_images=Item.MAX_IMAGES,
 		)
 
 	@app.post("/dashboard/listings/<int:listing_id>/delete")
@@ -1464,7 +1818,7 @@ def create_app() -> Flask:
 			price_max = None
 
 		# Build query
-		query = Item.query.filter(Item.category == category)
+		query = Item.query.filter(Item.category == category, Item.buyer_id.is_(None))
 		if selected_sub:
 			query = query.filter(Item.subcategory == selected_sub)
 		if selected_condition:
@@ -1537,6 +1891,92 @@ def create_app() -> Flask:
 			status_labels=TRACKING_STATUS_LABELS,
 		)
 
+	@app.get("/admin/reports")
+	@login_required
+	def admin_reports() -> ResponseReturnValue:
+		if not current_user.is_admin:
+			flash("That page is only available to admins.", "warning")
+			return redirect(url_for("index"))
+
+		reports = (
+			Report.query.filter_by(received_by=current_user.id)
+			.order_by(Report.timestamp.desc())
+			.all()
+		)
+		return render_template(
+			"admin_reports.html",
+			title="Reports | Baasket",
+			reports=reports,
+		)
+
+	@app.post("/admin/reports/<string:report_id>/remove-listing")
+	@login_required
+	def admin_remove_reported_listing(report_id: str) -> ResponseReturnValue:
+		report = _authorize_report_action(report_id)
+		if report is None:
+			return redirect(url_for("index") if not current_user.is_admin else url_for("admin_reports"))
+
+		listing = report.listing
+		if listing is None:
+			db.session.delete(report)
+			db.session.commit()
+			flash("That listing was already removed. The report has been cleared.", "info")
+			return redirect(url_for("admin_reports"))
+
+		listing_title = listing.title
+		# Every report pointing at this listing is now moot, not just the one
+		# the admin clicked through from — clear them all out of the inbox.
+		Report.query.filter_by(listing_id=listing.id).delete(synchronize_session=False)
+		db.session.delete(listing)  # cascades to its offers, likes, and images
+		db.session.commit()
+
+		flash(f'Removed the listing "{listing_title}" and cleared related reports.', "success")
+		return redirect(url_for("admin_reports"))
+
+	@app.post("/admin/reports/<string:report_id>/remove-user")
+	@login_required
+	def admin_remove_reported_user(report_id: str) -> ResponseReturnValue:
+		report = _authorize_report_action(report_id)
+		if report is None:
+			return redirect(url_for("index") if not current_user.is_admin else url_for("admin_reports"))
+
+		listing = report.listing
+		if listing is None:
+			db.session.delete(report)
+			db.session.commit()
+			flash("That listing was already removed, so there's no seller left to act on. The report has been cleared.", "info")
+			return redirect(url_for("admin_reports"))
+
+		seller = listing.seller
+		if seller is None:
+			flash("That listing's seller could not be found.", "warning")
+			return redirect(url_for("admin_reports"))
+		if seller.is_admin:
+			flash("Admin accounts can't be removed this way.", "warning")
+			return redirect(url_for("admin_reports"))
+
+		seller_username = seller.username
+		seller_listing_ids = [item.id for item in seller.listings]
+		if seller_listing_ids:
+			# Clear out every report tied to any of this seller's listings —
+			# they're all about to be deleted along with the seller.
+			Report.query.filter(Report.listing_id.in_(seller_listing_ids)).delete(synchronize_session=False)
+		db.session.delete(seller)  # cascades to their listings, offers, likes, and images
+		db.session.commit()
+
+		flash(f'Removed the user "{seller_username}" and their listings.', "success")
+		return redirect(url_for("admin_reports"))
+
+
+	@app.get('/orders')
+	@login_required
+	def orders_list() -> ResponseReturnValue:
+		orders = _orders_for_buyer(current_user.id)
+		return render_template(
+			'orders.html',
+			title='Your Orders | Baasket',
+			orders=orders,
+		)
 
 	@app.get('/orders/<int:order_id>') # logistic
 	@login_required
@@ -1548,12 +1988,21 @@ def create_app() -> Flask:
 		if not _user_can_view_order(current_user.id, order):
 			flash('You do not have permission to view this order.', 'warning')
 			return redirect(url_for('purchases'))
+
+		order_item_ids = [item.id for item in order.items]
+		reviews_by_item = {
+			review.order_item_id: review
+			for review in Review.query.filter(Review.order_item_id.in_(order_item_ids)).all()
+		} if order_item_ids else {}
+
 		shipping = db.session.get(Shipping, order.shipping_id) if order.shipping_id else None
 		return render_template(
 			'order_detail.html',
 			order=order,
 			shipping=shipping,
 			title='Order Details',
+			reviews_by_item=reviews_by_item,
+			review_max_images=Review.MAX_IMAGES,
 		)
 
 
@@ -1574,6 +2023,59 @@ def create_app() -> Flask:
 			'tracking_number': shipping.trackingNumber if shipping else None,
 			'estimated_delivery': shipping.estimatedDeliveryDate.isoformat() if shipping and shipping.estimatedDeliveryDate else None,
 		}
+
+	@app.post('/orders/<int:order_id>/items/<int:order_item_id>/review')
+	@login_required
+	def submit_review(order_id: int, order_item_id: int) -> ResponseReturnValue:
+		order = db.session.get(OrderModel, order_id)
+		if order is None:
+			flash('Order not found.', 'warning')
+			return redirect(url_for('index'))
+		if order.buyer_id is not None and order.buyer_id != current_user.id:
+			flash('You can only review your own orders.', 'warning')
+			return redirect(url_for('index'))
+		if order.tracking_status != 'delivered':
+			flash('You can leave a review once this order has been delivered.', 'warning')
+			return redirect(url_for('order_detail', order_id=order_id))
+
+		order_item = db.session.get(OrderItemModel, order_item_id)
+		if order_item is None or order_item.order_id != order.id:
+			flash('That item could not be found on this order.', 'warning')
+			return redirect(url_for('order_detail', order_id=order_id))
+
+		if Review.query.filter_by(order_item_id=order_item.id).first() is not None:
+			flash('You have already reviewed this item.', 'info')
+			return redirect(url_for('order_detail', order_id=order_id))
+
+		try:
+			rating = float(request.form.get('rating', ''))
+		except ValueError:
+			rating = 0.0
+		rating = max(1, min(5, round(rating)))
+		comment = request.form.get('comment', '').strip()[:500]
+
+		listing = db.session.get(Item, order_item.listing_id)
+		uploaded_files = [f for f in request.files.getlist('images') if getattr(f, 'filename', '')]
+		if len(uploaded_files) > Review.MAX_IMAGES:
+			flash(f'You can attach up to {Review.MAX_IMAGES} photos per review — only the first {Review.MAX_IMAGES} were used.', 'warning')
+		image_paths = _save_uploads(uploaded_files, REVIEW_UPLOAD_DIR, Review.MAX_IMAGES)
+
+		review = Review()
+		review.reviewID = uuid4().hex
+		review.ratingValue = rating
+		review.comment = comment
+		review.created_by = current_user.id
+		review.seller_id = listing.seller_id if listing else None
+		review.listing_id = listing.id if listing else None
+		review.order_id = order.id
+		review.order_item_id = order_item.id
+		for position, image_path in enumerate(image_paths):
+			review.images.append(ReviewImage(image_path=image_path, position=position))
+		db.session.add(review)
+		db.session.commit()
+
+		flash('Thanks for your review!', 'success')
+		return redirect(url_for('order_detail', order_id=order_id))
 
 	return app
 

@@ -4,7 +4,9 @@
 <!-- ── Seller dashboard hero ─────────────────────────────────────────────── -->
 <section class="dashboard-hero card-surface reveal" data-reveal>
   <div class="dashboard-profile">
-    <img src="{{ current_user.profile_image_url }}" alt="{{ current_user.username }} profile image" class="dashboard-avatar">
+    <a href="{{ url_for('user_profile', user_id=current_user.id) }}" class="avatar-link">
+      <img src="{{ current_user.profile_image_url }}" alt="{{ current_user.username }} profile image" class="dashboard-avatar">
+    </a>
     <div>
       <p class="eyebrow">Seller dashboard</p>
       <h1>{{ current_user.username }}</h1>
@@ -126,22 +128,162 @@
     </div>
   </div>
 
-  <div class="listing-grid thumbnail-grid">
+  <div class="listing-grid compact-grid">
     {% for listing in listings %}
-      <article class="thumb-card reveal" data-reveal>
-        <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="thumb-image-wrap">
+      <article class="product-card reveal" data-reveal>
+        <a href="{{ url_for('listing_detail', listing_id=listing.id) }}" class="product-image-wrap">
           <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
           <span class="badge {% if listing.buyer_id %}badge-sold{% else %}badge-available{% endif %}">
             {% if listing.buyer_id %}Sold{% else %}Available{% endif %}
           </span>
         </a>
-        <div class="thumb-meta">
-          <h3 class="thumb-title"><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
-          <div class="thumb-price">{{ listing.price|money }}</div>
+        <div class="product-copy">
+          <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
+          <div class="price-row">
+            <strong>{{ listing.price|money }}</strong>
+            <span class="product-likes">&hearts; {{ listing.like_count }}</span>
+          </div>
         </div>
       </article>
     {% else %}
       <div class="empty-state wide">You have not posted any items yet.</div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ── Reviews you've received ───────────────────────────────────────────── -->
+<section class="section-block">
+  <div class="section-heading">
+    <div>
+      <h2>Reviews you&rsquo;ve received</h2>
+      <p>Feedback buyers left after purchasing your listings.</p>
+    </div>
+  </div>
+
+  <div class="reviews-list">
+    {% for review in reviews_received %}
+      <article class="review-card">
+        <div class="review-head">
+          {% if review.reviewer %}
+            <a href="{{ url_for('user_profile', user_id=review.reviewer.id) }}" class="avatar-link">
+              <img src="{{ review.reviewer.profile_image_url }}" alt="{{ review.reviewer.username }}" class="avatar-sm">
+            </a>
+          {% else %}
+            <img src="/static/assets/logo/baasket_logo.png" alt="" class="avatar-sm">
+          {% endif %}
+          <div>
+            <strong>{{ review.reviewer_name }}</strong>
+            <p class="review-meta">{{ review.created_at|timeago }}</p>
+          </div>
+        </div>
+        <span class="stars" aria-hidden="true">{% for i in range(5) %}<span class="star{% if i < review.full_stars %} is-filled{% endif %}">&#9733;</span>{% endfor %}</span>
+        {% if review.comment %}<p class="review-comment">{{ review.comment }}</p>{% endif %}
+        {% if review.image_urls %}
+          <div class="review-photos-grid">
+            {% for url in review.image_urls %}
+              <a href="{{ url }}" target="_blank" rel="noopener" class="review-photo-cell">
+                <img src="{{ url }}" alt="Review photo">
+              </a>
+            {% endfor %}
+          </div>
+        {% endif %}
+        {% if review.listing %}
+          <p class="review-item-tag">
+            On: <a href="{{ url_for('listing_detail', listing_id=review.listing.id) }}">{{ review.listing.title }}</a>
+          </p>
+        {% endif %}
+      </article>
+    {% else %}
+      <div class="empty-state wide">No reviews yet &mdash; they&rsquo;ll show up here once buyers review your listings.</div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ── Reviews you've made ───────────────────────────────────────────────── -->
+<section class="section-block">
+  <div class="section-heading">
+    <div>
+      <h2>Reviews you&rsquo;ve made</h2>
+      <p>Feedback you&rsquo;ve left for sellers after a purchase.</p>
+    </div>
+  </div>
+
+  <div class="reviews-list">
+    {% for review in reviews_made %}
+      <article class="review-card review-card--own">
+        <div class="review-head">
+          {% if review.seller %}
+            <a href="{{ url_for('user_profile', user_id=review.seller.id) }}" class="avatar-link">
+              <img src="{{ review.seller.profile_image_url }}" alt="{{ review.seller.username }}" class="avatar-sm">
+            </a>
+          {% else %}
+            <img src="/static/assets/logo/baasket_logo.png" alt="" class="avatar-sm">
+          {% endif %}
+          <div>
+            <strong>{{ review.seller.username if review.seller else "Baasket seller" }}</strong>
+            <p class="review-meta">{{ review.created_at|timeago }}</p>
+          </div>
+        </div>
+        <span class="stars" aria-hidden="true">{% for i in range(5) %}<span class="star{% if i < review.full_stars %} is-filled{% endif %}">&#9733;</span>{% endfor %}</span>
+        {% if review.comment %}<p class="review-comment">{{ review.comment }}</p>{% endif %}
+        {% if review.image_urls %}
+          <div class="review-photos-grid">
+            {% for url in review.image_urls %}
+              <a href="{{ url }}" target="_blank" rel="noopener" class="review-photo-cell">
+                <img src="{{ url }}" alt="Review photo">
+              </a>
+            {% endfor %}
+          </div>
+        {% endif %}
+        {% if review.listing %}
+          <p class="review-item-tag">
+            On: <a href="{{ url_for('listing_detail', listing_id=review.listing.id) }}">{{ review.listing.title }}</a>
+          </p>
+        {% endif %}
+      </article>
+    {% else %}
+      <div class="empty-state wide">You haven&rsquo;t left any reviews yet &mdash; reviews you submit on delivered orders will show up here.</div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ── Items you've liked ────────────────────────────────────────────────── -->
+<section class="section-block">
+  <div class="section-heading">
+    <div>
+      <h2>Items you&rsquo;ve liked</h2>
+      <p>Private to your account &mdash; other shoppers can&rsquo;t see what you&rsquo;ve liked.</p>
+    </div>
+  </div>
+
+  <div class="listing-grid compact-grid">
+    {% for listing in liked_listings %}
+      <article class="product-card reveal" data-reveal>
+        <div class="product-image-wrap">
+          <a href="{{ url_for('listing_detail', listing_id=listing.id) }}">
+            <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
+          </a>
+          {% if listing.buyer_id %}
+            <span class="badge badge--muted">Sold</span>
+          {% elif listing.reserved %}
+            <span class="badge badge--muted">Reserved</span>
+          {% endif %}
+          <form method="post" action="{{ url_for('toggle_like', listing_id=listing.id) }}" class="like-toggle-form">
+            <input type="hidden" name="next" value="{{ url_for('dashboard') }}">
+            <button type="submit" class="like-toggle is-liked" aria-pressed="true" aria-label="Remove {{ listing.title }} from your likes">&hearts;</button>
+          </form>
+        </div>
+        <div class="product-copy">
+          <p class="product-category">{{ listing.category }}</p>
+          <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
+          <p class="product-meta">{{ listing.condition }} &middot; {{ listing.seller_name }}</p>
+          <div class="price-row">
+            <strong>{{ listing.price|money }}</strong>
+          </div>
+        </div>
+      </article>
+    {% else %}
+      <div class="empty-state wide">You haven&rsquo;t liked anything yet. Tap the heart on a listing to save it here.</div>
     {% endfor %}
   </div>
 </section>

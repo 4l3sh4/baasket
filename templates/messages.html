@@ -18,7 +18,7 @@
         {% set last_msg = entry.last_message %}
         {% set other = entry.other_party %}
 
-        <a href="{{ url_for('chat_view', chat_id=chat.chatID) }}" class="inbox-row card-surface">
+        <a href="{{ url_for('chat_view', chat_id=chat.chatID) }}" class="inbox-row">
 
           {# Listing thumbnail #}
           <div class="inbox-thumb-wrap">
@@ -68,7 +68,9 @@
 
           {# Role chip #}
           <div class="inbox-role">
-            {% if current_user.id == chat.buyer_id %}
+            {% if current_user.is_admin %}
+              <span class="role-chip role-chip--admin">Admin</span>
+            {% elif current_user.id == chat.buyer_id %}
               <span class="role-chip role-chip--buyer">Buyer</span>
             {% else %}
               <span class="role-chip role-chip--seller">Seller</span>
