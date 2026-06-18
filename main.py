@@ -819,6 +819,8 @@ def create_app() -> Flask:
 					("seller_id", "INTEGER"),
 					("listing_id", "INTEGER"),
 					("created_at", "TEXT"),
+					("order_id", "INTEGER"),
+					("order_item_id", "INTEGER"),
 				],
 				"report": [
 					("reporter_id", "INTEGER"),
