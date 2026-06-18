@@ -10,6 +10,101 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@100..900&display=swap" rel="stylesheet">
   <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='assets/logo/baasket_favicon.png') }}">
+  <style>
+    /* ── Hamburger button (hidden on desktop) ──────────────────────────── */
+    .nav-toggle {
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      gap: 5px;
+      width: 40px;
+      height: 40px;
+      padding: 8px;
+      border: none;
+      border-radius: 12px;
+      background: transparent;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.2s ease;
+    }
+    .nav-toggle:hover {
+      background: rgba(21, 32, 43, 0.06);
+    }
+    .nav-toggle__bar {
+      display: block;
+      width: 100%;
+      height: 2px;
+      border-radius: 2px;
+      background: var(--accent);
+      transition: transform 0.25s ease, opacity 0.25s ease;
+    }
+    .nav-toggle[aria-expanded="true"] .nav-toggle__bar:nth-child(1) {
+      transform: translateY(7px) rotate(45deg);
+    }
+    .nav-toggle[aria-expanded="true"] .nav-toggle__bar:nth-child(2) {
+      opacity: 0;
+    }
+    .nav-toggle[aria-expanded="true"] .nav-toggle__bar:nth-child(3) {
+      transform: translateY(-7px) rotate(-45deg);
+    }
+
+    /* ── Lock logo to its natural size, never warp ─────────────────────── */
+    .brand-logo {
+      width: 217px;
+      height: 42px;
+      max-width: none;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    /* ── Mobile layout ─────────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .topbar {
+        flex-wrap: wrap;
+        border-radius: 20px;
+        padding: 12px 16px;
+        gap: 0;
+      }
+      .nav-toggle {
+        display: flex;
+        margin-left: auto;
+      }
+      .nav-links {
+        display: none;
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(21, 32, 43, 0.08);
+        gap: 4px;
+      }
+      .nav-links.is-open {
+        display: flex;
+      }
+      .nav-links a {
+        padding: 12px 14px;
+        border-radius: 14px;
+        justify-content: space-between;
+      }
+    }
+
+    /* ── Tablet tweaks (769–1024px) ────────────────────────────────────── */
+    @media (min-width: 769px) and (max-width: 1024px) {
+      .topbar {
+        border-radius: 24px;
+      }
+      .nav-links {
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      .nav-links a {
+        padding: 8px 10px;
+        font-size: 0.9rem;
+      }
+    }
+  </style>
 </head>
 <body>
   <div class="page-shell"></div>
@@ -17,7 +112,14 @@
     <a class="brand" href="{{ url_for('index') }}">
       <img src="{{ brand_logo }}" alt="Baasket logo" class="brand-logo">
     </a>
-    <nav class="nav-links">
+
+    <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="navLinks">
+      <span class="nav-toggle__bar"></span>
+      <span class="nav-toggle__bar"></span>
+      <span class="nav-toggle__bar"></span>
+    </button>
+
+    <nav class="nav-links" id="navLinks">
       <a href="{{ url_for('index') }}">Discover</a>
       {% if current_user.is_authenticated %}
         <a href="{{ url_for('dashboard') }}">Dashboard</a>
@@ -72,5 +174,33 @@
 
     {% block content %}{% endblock %}
   </main>
+  <script>
+    (function () {
+      var toggle = document.getElementById('navToggle');
+      var nav    = document.getElementById('navLinks');
+      if (!toggle || !nav) return;
+
+      toggle.addEventListener('click', function () {
+        var isOpen = nav.classList.toggle('is-open');
+        toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      });
+
+      // Close menu when a nav link is tapped (single-page or same-page nav)
+      nav.querySelectorAll('a').forEach(function (link) {
+        link.addEventListener('click', function () {
+          nav.classList.remove('is-open');
+          toggle.setAttribute('aria-expanded', 'false');
+        });
+      });
+
+      // Close when clicking outside the topbar
+      document.addEventListener('click', function (e) {
+        if (!e.target.closest('.topbar')) {
+          nav.classList.remove('is-open');
+          toggle.setAttribute('aria-expanded', 'false');
+        }
+      });
+    })();
+  </script>
 </body>
 </html>

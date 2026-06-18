@@ -8,9 +8,15 @@
       <img src="{{ current_user.profile_image_url }}" alt="{{ current_user.username }} profile image" class="dashboard-avatar">
     </a>
     <div>
-      <p class="eyebrow">Seller dashboard</p>
+      <p class="eyebrow">
+        {% if current_user.is_admin %}
+          Admin dashboard
+        {% else %}
+          Seller dashboard
+        {% endif %}
+      </p>
       <h1>{{ current_user.username }}</h1>
-      <p>{{ current_user.bio or "No bio yet. Tell buyers what you specialize in." }}</p>
+      <p>{{ current_user.bio or "No bio yet." }}</p>
       <p class="muted-text">{{ current_user.email }}</p>
     </div>
   </div>
@@ -41,7 +47,7 @@
     <div class="section-heading compact">
       <div>
         <h2>Edit profile</h2>
-        <p>Keep your seller page fresh without leaving the dashboard.</p>
+        <p>Keep your page fresh without leaving the dashboard.</p>
       </div>
       <button type="button" id="edit-profile-toggle" class="secondary-button">Edit profile</button>
     </div>
