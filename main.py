@@ -16,7 +16,10 @@ from typing import TypedDict
 
 from catalog import _build_art
 from extensions import db, login_manager
-from models import Item, Like, ListingImage, Notification, Offer, OrderItemModel, OrderModel, User, ChatSession, Message, Review, ReviewImage, Report
+from models import (
+	Item, Like, ListingImage, Notification, Offer, OrderItemModel, OrderModel,
+	Payment, User, ChatSession, Message, Review, ReviewImage, Report, DealMethod, Shipping,
+)
 from notifications import build_notification_subject
 from logistics_v2.flask_adapter import run_checkout_logistics_v2
 from offers import OfferBoard, get_redeemable_offer
@@ -351,6 +354,20 @@ def _persist_order(
 	order.offer_id = offer_id
 	db.session.add(order)
 	db.session.flush()
+
+	payment = Payment()
+	payment.paymentID = str(uuid4())
+	payment.paymentType = receipt.strategy_code
+	payment.sender_id = buyer_id
+	payment.order_id = order.id
+	payment.offer_id = offer_id
+	if lines:
+		first = lines[0]["listing"]
+		payment.item_id = first.id
+		payment.receiver_id = first.seller_id
+	payment.authorizePayment()
+	db.session.add(payment)
+	order.payment_id = payment.paymentID
 
 	for line in lines:
 		listing = line["listing"]
@@ -781,6 +798,7 @@ def create_app() -> Flask:
 					("order_id", "INTEGER"),
 					("gateway_reference", "TEXT"),
 					("provider", "TEXT"),
+					("shipping_id", "TEXT"),
 				],
 				"notification": [
 					("category", "TEXT"),
@@ -789,11 +807,20 @@ def create_app() -> Flask:
 				],
 				"order_model": [
 					("buyer_id", "INTEGER"),
+					("payment_id", "TEXT"),
+					("shipping_id", "TEXT"),
+				],
+				"shipping": [
+					("order_id", "INTEGER"),
+					("status", "TEXT DEFAULT 'created'"),
+					("delivered_at", "TEXT"),
 				],
 				"review": [
 					("seller_id", "INTEGER"),
 					("listing_id", "INTEGER"),
 					("created_at", "TEXT"),
+					("order_id", "INTEGER"),
+					("order_item_id", "INTEGER"),
 				],
 				"report": [
 					("reporter_id", "INTEGER"),
@@ -1006,6 +1033,8 @@ def create_app() -> Flask:
 			location = request.form.get("location", "").strip() or "Local pickup"
 			description = request.form.get("description", "").strip()[:1000]
 			buyable  = request.form.get("buyable",  "1") == "1"
+			method_type = request.form.get("method_type", "mailing").strip() or "mailing"
+			carrier_name = request.form.get("carrier_name", "Baasket Logistics").strip() or "Baasket Logistics"
 
 			if not title or not category or not price_text or not description:
 				flash("Title, category, price, and description are required.", "warning")
@@ -1046,6 +1075,19 @@ def create_app() -> Flask:
 			for position, image_path in enumerate(image_paths):
 				listing.images.append(ListingImage(image_path=image_path, position=position))
 			db.session.add(listing)
+			db.session.flush()
+
+			deal_method = DealMethod()
+			deal_method.dealMethodID = str(uuid4())
+			deal_method.methodType = method_type
+			deal_method.isDefault = True
+			deal_method.price = 0.0
+			deal_method.item_id = listing.id
+			if method_type == "meetup":
+				deal_method.meetupLocation = location
+			else:
+				deal_method.carrierName = carrier_name
+			db.session.add(deal_method)
 			db.session.commit()
 			flash("Your listing is now live on Baasket.", "success")
 			return redirect(url_for("listing_detail", listing_id=listing.id))
@@ -1945,9 +1987,9 @@ def create_app() -> Flask:
 		if order is None:
 			flash('Order not found', 'warning')
 			return redirect(url_for('index'))
-		if order.buyer_id is not None and order.buyer_id != current_user.id:
-			flash('You can only view your own orders.', 'warning')
-			return redirect(url_for('index'))
+		if not _user_can_view_order(current_user.id, order):
+			flash('You do not have permission to view this order.', 'warning')
+			return redirect(url_for('purchases'))
 
 		order_item_ids = [item.id for item in order.items]
 		reviews_by_item = {
@@ -1955,9 +1997,11 @@ def create_app() -> Flask:
 			for review in Review.query.filter(Review.order_item_id.in_(order_item_ids)).all()
 		} if order_item_ids else {}
 
+		shipping = db.session.get(Shipping, order.shipping_id) if order.shipping_id else None
 		return render_template(
 			'order_detail.html',
 			order=order,
+			shipping=shipping,
 			title='Order Details',
 			reviews_by_item=reviews_by_item,
 			review_max_images=Review.MAX_IMAGES,
@@ -1972,10 +2016,14 @@ def create_app() -> Flask:
 			return {'error': 'not found'}, 404
 		if not _user_can_view_order(current_user.id, order):
 			return {'error': 'forbidden'}, 403
+		shipping = db.session.get(Shipping, order.shipping_id) if order.shipping_id else None
 		return {
 			'order_id': order.id,
 			'tracking_status': order.tracking_status,
 			'tracking_updated_at': order.tracking_updated_at.isoformat() if order.tracking_updated_at else None,
+			'carrier_name': shipping.carrierName if shipping else None,
+			'tracking_number': shipping.trackingNumber if shipping else None,
+			'estimated_delivery': shipping.estimatedDeliveryDate.isoformat() if shipping and shipping.estimatedDeliveryDate else None,
 		}
 
 	@app.post('/orders/<int:order_id>/items/<int:order_item_id>/review')

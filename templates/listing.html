@@ -173,11 +173,25 @@
 
     <article class="card-surface listing-block">
       <h2>Deal method</h2>
-      <div class="seller-context">
-        <span><strong>Meet-up</strong></span>
-        <span>Free</span>
-      </div>
-      <p class="subtle" style="margin-top:10px;">{{ listing.location or "Local pickup" }}</p>
+      {% if listing.default_deal_method %}
+        <div class="seller-context">
+          <span><strong>{% if listing.default_deal_method.methodType == 'meetup' %}Meet-up{% else %}Mailing{% endif %}</strong></span>
+          <span>{% if listing.default_deal_method.price %}RM{{ '%.2f'|format(listing.default_deal_method.price) }}{% else %}Free{% endif %}</span>
+        </div>
+        <p class="subtle" style="margin-top:10px;">
+          {% if listing.default_deal_method.methodType == 'meetup' %}
+            {{ listing.default_deal_method.meetupLocation or listing.location or "Local pickup" }}
+          {% else %}
+            {{ listing.default_deal_method.carrierName or "Baasket Logistics" }}
+          {% endif %}
+        </p>
+      {% else %}
+        <div class="seller-context">
+          <span><strong>Meet-up</strong></span>
+          <span>Free</span>
+        </div>
+        <p class="subtle" style="margin-top:10px;">{{ listing.location or "Local pickup" }}</p>
+      {% endif %}
     </article>
 
     <article class="card-surface listing-block">

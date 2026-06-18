@@ -73,6 +73,22 @@
         <input type="text" name="location" placeholder="e.g. Petaling Jaya, KL">
       </label>
 
+      <label>
+        Deal method
+        <div class="select-wrap">
+          <select name="method_type" id="method-type-select">
+            <option value="mailing" selected>Mailing / delivery</option>
+            <option value="meetup">Meet-up</option>
+          </select>
+          <span class="select-arrow">▾</span>
+        </div>
+      </label>
+
+      <label id="carrier-label">
+        Carrier
+        <input type="text" name="carrier_name" value="Baasket Logistics" placeholder="e.g. Pos Laju">
+      </label>
+
       <div class="form-two-col">
         <label class="toggle-label">
           <div class="toggle-label-text">
@@ -162,6 +178,16 @@
   }
 
   catSel.addEventListener('change', refreshSubs);
+
+  var methodSel = document.getElementById('method-type-select');
+  var carrierLabel = document.getElementById('carrier-label');
+  if (methodSel && carrierLabel) {
+    function refreshDealMethod() {
+      carrierLabel.style.display = methodSel.value === 'meetup' ? 'none' : '';
+    }
+    methodSel.addEventListener('change', refreshDealMethod);
+    refreshDealMethod();
+  }
 
   var zone  = document.getElementById('file-drop-zone');
   var inp   = document.getElementById('image-input');

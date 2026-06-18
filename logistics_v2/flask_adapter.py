@@ -9,6 +9,7 @@ from flask import Flask
 from logistics_v2.checkout_session import CheckoutSession
 from logistics_v2.factory import wire_standard_observers
 from logistics_v2.order_persistence_observer import OrderPersistenceObserver
+from logistics_v2.shipping_observer import ShippingObserver
 from payment import PaymentReceipt
 
 
@@ -45,5 +46,6 @@ def run_checkout_logistics_v2(
 
     wire_standard_observers(session, step_delay_seconds=delay)
     session.attach(OrderPersistenceObserver(order_id, app))
+    session.attach(ShippingObserver(order_id, app))
     session.confirm_payment(order_id=order_id)
     return session
