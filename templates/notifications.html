@@ -20,6 +20,7 @@
               {% if notif.category == "offer_accepted" %}🎉
               {% elif notif.category == "offer_declined" %}❌
               {% elif notif.category == "purchase" %}🛍️
+              {% elif notif.category == "report_received" %}🚩
               {% else %}🔔
               {% endif %}
             </div>
@@ -31,6 +32,7 @@
                 {% if notif.category == "offer_accepted" %}Offer Accepted
                 {% elif notif.category == "offer_declined" %}Offer Declined
                 {% elif notif.category == "purchase" %}Item Sold
+                {% elif notif.category == "report_received" %}New Report
                 {% else %}Notification
                 {% endif %}
               </span>
@@ -46,6 +48,8 @@
               <span class="role-chip">Declined</span>
             {% elif notif.category == "purchase" %}
               <span class="role-chip role-chip--buyer">Sold</span>
+            {% elif notif.category == "report_received" %}
+              <span class="role-chip">Report</span>
             {% endif %}
           </div>
 

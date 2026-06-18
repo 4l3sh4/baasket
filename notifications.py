@@ -72,6 +72,33 @@ class SellerNotificationObserver(NotificationObserver):
         db.session.add(Notification(user_id=seller_id, message=msg, category=category))
 
 
+class AdminNotificationObserver(NotificationObserver):
+    """Creates an in-app notification for the admin a report was routed to."""
+
+    def update(self, event: str, context: dict) -> None:
+        from models import Notification
+
+        if event != "report_received":
+            return
+
+        admin_id = context.get("admin_id")
+        if not admin_id:
+            return
+
+        reporter = context.get("reporter_name", "A user")
+        reason = context.get("reason", "Other")
+        listing_title = context.get("listing_title", "a listing")
+        msg = f"{reporter} reported \"{listing_title}\" for {reason}."
+
+        db.session.add(
+            Notification(
+                user_id=admin_id,
+                message=msg,
+                category="report_received",
+            )
+        )
+
+
 class NotificationSubject:
     """Subject that manages observers and dispatches events."""
 
@@ -93,4 +120,5 @@ def build_notification_subject() -> NotificationSubject:
     subject = NotificationSubject()
     subject.attach(BuyerNotificationObserver())
     subject.attach(SellerNotificationObserver())
+    subject.attach(AdminNotificationObserver())
     return subject

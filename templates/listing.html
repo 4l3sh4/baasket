@@ -7,9 +7,11 @@
 
 {% macro offer_chat_buttons(listing) -%}
 {% if current_user.is_authenticated %}
-  <form method="post" action="{{ url_for('start_chat', listing_id=listing.id) }}">
-    <button type="submit" class="secondary-button">Make Offer</button>
-  </form>
+  {% if not current_user.is_admin %}
+    <form method="post" action="{{ url_for('start_chat', listing_id=listing.id) }}">
+      <button type="submit" class="secondary-button">Make Offer</button>
+    </form>
+  {% endif %}
   <form method="post" action="{{ url_for('start_chat', listing_id=listing.id) }}">
     <button type="submit" class="secondary-button">Chat</button>
   </form>
@@ -43,8 +45,12 @@
         <img src="{{ gallery[0] }}" alt="{{ listing.title }}" class="gallery-main-image" id="gallery-main-image">
 
         <div class="gallery-actions">
-          <button type="button" class="gallery-pill" id="share-button">Share</button>
+          {% if not current_user.is_admin %}
+            <button type="button" class="gallery-pill" id="share-button">Share</button>
+          {% endif %}
           {% if is_owner %}
+            <span class="gallery-pill gallery-pill--static">&hearts; {{ listing.like_count }} like{{ "s" if listing.like_count != 1 else "" }}</span>
+          {% elif current_user.is_admin %}
             <span class="gallery-pill gallery-pill--static">&hearts; {{ listing.like_count }} like{{ "s" if listing.like_count != 1 else "" }}</span>
           {% elif current_user.is_authenticated %}
             {% set is_liked = listing.is_liked_by(current_user) %}
@@ -57,7 +63,7 @@
           {% else %}
             <a href="{{ url_for('login', next=request.path) }}" class="gallery-pill">&hearts; {{ listing.like_count }} like{{ "s" if listing.like_count != 1 else "" }}</a>
           {% endif %}
-          {% if current_user.is_authenticated and not is_owner %}
+          {% if current_user.is_authenticated and not is_owner and not current_user.is_admin %}
             <button type="button" class="gallery-pill" id="report-open-button">Report</button>
           {% endif %}
         </div>
@@ -78,7 +84,7 @@
       {% endif %}
     </article>
 
-    {% if current_user.is_authenticated and not is_owner %}
+    {% if current_user.is_authenticated and not is_owner and not current_user.is_admin %}
       <div class="report-panel card-surface" id="report-panel" hidden>
         <h3>Report this listing</h3>
         <form method="post" action="{{ url_for('report_listing', listing_id=listing.id) }}" class="stack-form">
@@ -316,6 +322,8 @@
         <p class="subtle">This item has already been sold.</p>
       {% elif not listing.buyable %}
         <p class="subtle">{{ "Reserved for another buyer right now." if listing.reserved else "Not available for direct purchase right now." }}</p>
+      {% elif current_user.is_authenticated and current_user.is_admin %}
+        <p class="subtle">Admin accounts can't buy listings.</p>
       {% else %}
         <div class="buy-actions">
           {% if current_user.is_authenticated %}
@@ -372,7 +380,7 @@
           {% elif item.reserved %}
             <span class="badge badge--muted">Reserved</span>
           {% endif %}
-          {% if current_user.is_authenticated and current_user.id != item.seller_id %}
+          {% if current_user.is_authenticated and current_user.id != item.seller_id and not current_user.is_admin %}
             {% set is_liked = item.is_liked_by(current_user) %}
             <form method="post" action="{{ url_for('toggle_like', listing_id=item.id) }}" class="like-toggle-form">
               <input type="hidden" name="next" value="{{ request.full_path }}">

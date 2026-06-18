@@ -57,7 +57,7 @@
         <a href="{{ url_for('listing_detail', listing_id=feature.id) }}">
           <img src="{{ feature.image_data }}" alt="{{ feature.title }}" class="hero-preview">
         </a>
-        {% if current_user.is_authenticated and current_user.id != feature.seller_id %}
+        {% if current_user.is_authenticated and current_user.id != feature.seller_id and not current_user.is_admin %}
           {% set is_liked = feature.is_liked_by(current_user) %}
           <form method="post" action="{{ url_for('toggle_like', listing_id=feature.id) }}" class="like-toggle-form">
             <input type="hidden" name="next" value="{{ request.full_path }}">
@@ -102,7 +102,7 @@
             <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
           </a>
           <span class="badge">{{ listing.badge }}</span>
-          {% if current_user.is_authenticated and current_user.id != listing.seller_id %}
+          {% if current_user.is_authenticated and current_user.id != listing.seller_id and not current_user.is_admin %}
             {% set is_liked = listing.is_liked_by(current_user) %}
             <form method="post" action="{{ url_for('toggle_like', listing_id=listing.id) }}" class="like-toggle-form">
               <input type="hidden" name="next" value="{{ request.full_path }}">

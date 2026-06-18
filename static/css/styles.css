@@ -980,6 +980,10 @@ h3 {
   background: #1f6f78;
 }
 
+.admin-chip .chip-dot {
+  background: #8b5ce6;
+}
+
 .participant-divider {
   color: var(--muted);
   font-size: 1rem;
@@ -1540,6 +1544,11 @@ h3 {
 .role-chip--seller {
   background: rgba(31, 111, 120, 0.1);
   color: #1f6f78;
+}
+
+.role-chip--admin {
+  background: rgba(139, 92, 226, 0.1);
+  color: #8b5ce6;
 }
 
 .inbox-arrow {

@@ -812,6 +812,9 @@ def create_app() -> Flask:
 	@app.post("/listing/<int:listing_id>/cart")
 	@login_required
 	def add_to_cart(listing_id: int):
+		if current_user.is_admin:
+			flash("Admin accounts can't buy listings.", "warning")
+			return redirect(url_for("listing_detail", listing_id=listing_id))
 		listing = db.session.get(Item, listing_id)
 		if listing is None:
 			flash("The item you tried to add could not be found.", "warning")
@@ -834,6 +837,10 @@ def create_app() -> Flask:
 		fallback = url_for("listing_detail", listing_id=listing.id)
 		destination = _safe_redirect_target(request.form.get("next"), fallback)
 
+		if current_user.is_admin:
+			flash("Admin accounts can't like listings.", "warning")
+			return redirect(destination)
+
 		if listing.seller_id == current_user.id:
 			flash("You cannot like your own listing.", "warning")
 			return redirect(destination)
@@ -855,6 +862,10 @@ def create_app() -> Flask:
 			flash("That listing could not be found.", "warning")
 			return redirect(url_for("index"))
 
+		if current_user.is_admin:
+			flash("Admin accounts can't report listings.", "warning")
+			return redirect(url_for("listing_detail", listing_id=listing_id))
+
 		reason = request.form.get("reason", "").strip() or "Other"
 		details = request.form.get("details", "").strip()[:1000]
 
@@ -869,6 +880,16 @@ def create_app() -> Flask:
 		report.listing_id = listing.id
 		db.session.add(report)
 		db.session.commit()
+
+		if admin is not None:
+			notification_subject.notify("report_received", {
+				"admin_id": admin.id,
+				"report_id": report.reportID,
+				"reporter_name": current_user.username,
+				"reason": reason,
+				"listing_title": listing.title,
+			})
+			db.session.commit()
 
 		flash("Thanks — your report has been sent to the Baasket team.", "success")
 		return redirect(url_for("listing_detail", listing_id=listing_id))
@@ -904,6 +925,9 @@ def create_app() -> Flask:
 	@app.route("/sell", methods=["GET", "POST"])
 	@login_required
 	def sell() -> ResponseReturnValue:
+		if current_user.is_admin:
+			flash("Admin accounts can't create listings.", "warning")
+			return redirect(url_for("index"))
 		if request.method == "POST":
 			title = request.form.get("title", "").strip()[:100]
 			category = request.form.get("category", "").strip()
@@ -988,6 +1012,9 @@ def create_app() -> Flask:
 	@app.post("/checkout")
 	@login_required
 	def checkout() -> ResponseReturnValue:
+		if current_user.is_admin:
+			flash("Admin accounts can't buy listings.", "warning")
+			return redirect(url_for("cart_view"))
 		lines, subtotal = _create_cart_lines()
 		if not lines:
 			flash("Add a few items before checking out.", "warning")
@@ -1073,6 +1100,9 @@ def create_app() -> Flask:
 	@app.route("/offers/<int:offer_id>/checkout", methods=["GET", "POST"])
 	@login_required
 	def offer_checkout(offer_id: int) -> ResponseReturnValue:
+		if current_user.is_admin:
+			flash("Admin accounts can't buy listings.", "warning")
+			return redirect(url_for("notifications_view"))
 		offer = get_redeemable_offer(offer_id, current_user.id)
 		if offer is None:
 			flash("This offer is not available for purchase.", "warning")
@@ -1281,6 +1311,9 @@ def create_app() -> Flask:
 	@app.post("/chat/<string:chat_id>/offer")
 	@login_required
 	def chat_offer(chat_id: str) -> ResponseReturnValue:
+		if current_user.is_admin:
+			flash("Admin accounts can't make offers.", "warning")
+			return redirect(url_for("chat_view", chat_id=chat_id))
 		chat = ChatSession.query.filter_by(chatID=chat_id).first()
 		if chat is None:
 			flash("Invalid chat session.", "warning")

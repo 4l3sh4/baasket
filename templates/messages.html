@@ -68,7 +68,9 @@
 
           {# Role chip #}
           <div class="inbox-role">
-            {% if current_user.id == chat.buyer_id %}
+            {% if current_user.is_admin %}
+              <span class="role-chip role-chip--admin">Admin</span>
+            {% elif current_user.id == chat.buyer_id %}
               <span class="role-chip role-chip--buyer">Buyer</span>
             {% else %}
               <span class="role-chip role-chip--seller">Seller</span>
