@@ -36,11 +36,11 @@
         <form method="post" action="{{ url_for('checkout') }}" class="stack-form">
           <label>
             Name
-            <input type="text" name="buyer_name" placeholder="Your name" required>
+            <input type="text" name="buyer_name" value="{{ current_user.username }}" placeholder="Your name" required>
           </label>
           <label>
             Email
-            <input type="email" name="buyer_email" placeholder="you@example.com">
+            <input type="email" name="buyer_email" value="{{ current_user.email }}" placeholder="you@example.com">
           </label>
           <label>
             Payment method

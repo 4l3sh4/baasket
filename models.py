@@ -159,6 +159,7 @@ class Offer(db.Model):
 
 class OrderModel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    buyer_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
     buyer_name = db.Column(db.String(80), nullable=False)
     buyer_email = db.Column(db.String(120), nullable=False, default="")
     payment_method = db.Column(db.String(40), nullable=False)
@@ -173,6 +174,7 @@ class OrderModel(db.Model):
     tracking_updated_at = db.Column(db.DateTime, nullable=True)
     offer_id = db.Column(db.Integer, db.ForeignKey("offer.id"), nullable=True, index=True)
 
+    buyer = db.relationship("User", foreign_keys=[buyer_id], backref="orders")
     items = db.relationship("OrderItemModel", backref="order", lazy=True, cascade="all, delete-orphan")
 
     @property
