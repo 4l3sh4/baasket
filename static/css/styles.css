@@ -1529,6 +1529,26 @@ h3 {
   color: #1f6f78;
 }
 
+.purchase-status-chip--paid {
+  background: rgba(226, 109, 92, 0.1);
+  color: var(--accent-deep);
+}
+
+.purchase-status-chip--packed {
+  background: rgba(31, 111, 120, 0.1);
+  color: #1f6f78;
+}
+
+.purchase-status-chip--shipped {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+}
+
+.purchase-status-chip--delivered {
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+}
+
 .inbox-arrow {
   color: var(--muted);
   font-size: 1rem;

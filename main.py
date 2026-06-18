@@ -258,6 +258,14 @@ def _money(value: object) -> str:
 	return f"RM{amount:,.2f}"
 
 
+TRACKING_STATUS_LABELS = {
+	"paid": "Processing",
+	"packed": "Preparing order",
+	"shipped": "In transit",
+	"delivered": "Completed",
+}
+
+
 class CartLine(TypedDict):
 	listing: Item
 	quantity: int
@@ -273,6 +281,7 @@ class OrderLine(TypedDict):
 
 def _persist_order(
 	*,
+	buyer_id: int,
 	buyer_name: str,
 	buyer_email: str,
 	receipt: PaymentReceipt,
@@ -281,6 +290,7 @@ def _persist_order(
 	offer_id: int | None = None,
 ) -> OrderModel:
 	order = OrderModel()
+	order.buyer_id = buyer_id
 	order.buyer_name = buyer_name
 	order.buyer_email = buyer_email
 	order.payment_method = receipt.strategy_code
@@ -427,6 +437,35 @@ def _sales_history_for_user(user_id: int) -> list[dict[str, object]]:
 		}
 		for item in order_items
 	]
+
+
+def _user_can_view_order(user_id: int, order: OrderModel) -> bool:
+	if order.buyer_id == user_id:
+		return True
+	for item in order.items:
+		listing = db.session.get(Item, item.listing_id)
+		if listing and listing.seller_id == user_id:
+			return True
+	return False
+
+
+def _purchase_history_for_user(user_id: int) -> list[dict[str, object]]:
+	orders = (
+		OrderModel.query.filter_by(buyer_id=user_id)
+		.order_by(OrderModel.created_at.desc())
+		.all()
+	)
+	entries: list[dict[str, object]] = []
+	for order in orders:
+		first_listing = None
+		if order.items:
+			first_listing = db.session.get(Item, order.items[0].listing_id)
+		entries.append({
+			"order": order,
+			"first_listing": first_listing,
+			"extra_count": max(0, len(order.items) - 1),
+		})
+	return entries
 
 
 def _seed_database() -> None:
@@ -576,6 +615,9 @@ def create_app() -> Flask:
 					("is_read", "INTEGER DEFAULT 0"),
 					("related_id", "INTEGER"),
 				],
+				"order_model": [
+					("buyer_id", "INTEGER"),
+				],
 			}
 
 			for table, cols in table_columns.items():
@@ -590,6 +632,28 @@ def create_app() -> Flask:
 							db.session.rollback()
 
 		_ensure_schema_columns()
+
+		def _backfill_order_buyer_ids() -> None:
+			orders = OrderModel.query.filter(OrderModel.buyer_id.is_(None)).all()
+			changed = False
+			for order in orders:
+				buyer_id = None
+				for item in order.items:
+					listing = db.session.get(Item, item.listing_id)
+					if listing and listing.buyer_id:
+						buyer_id = listing.buyer_id
+						break
+				if buyer_id is None and order.buyer_email:
+					user = User.query.filter(User.email.ilike(order.buyer_email)).first()
+					if user:
+						buyer_id = user.id
+				if buyer_id:
+					order.buyer_id = buyer_id
+					changed = True
+			if changed:
+				db.session.commit()
+
+		_backfill_order_buyer_ids()
 
 	@app.get("/")
 	def index() -> ResponseReturnValue:
@@ -748,6 +812,7 @@ def create_app() -> Flask:
 			for line in lines
 		]
 		order = _persist_order(
+			buyer_id=current_user.id,
 			buyer_name=buyer_name,
 			buyer_email=buyer_email,
 			receipt=receipt,
@@ -845,6 +910,7 @@ def create_app() -> Flask:
 			"unit_price": offer_subtotal,
 		}]
 		order = _persist_order(
+			buyer_id=current_user.id,
 			buyer_name=buyer_name,
 			buyer_email=buyer_email,
 			receipt=receipt,
@@ -1423,6 +1489,18 @@ def create_app() -> Flask:
 		)
 
 
+	@app.get("/purchases")
+	@login_required
+	def purchases() -> ResponseReturnValue:
+		entries = _purchase_history_for_user(current_user.id)
+		return render_template(
+			"purchases.html",
+			title="My Purchases | Baasket",
+			entries=entries,
+			status_labels=TRACKING_STATUS_LABELS,
+		)
+
+
 	@app.get('/orders/<int:order_id>') # logistic
 	@login_required
 	def order_detail(order_id: int) -> ResponseReturnValue:
@@ -1430,6 +1508,9 @@ def create_app() -> Flask:
 		if order is None:
 			flash('Order not found', 'warning')
 			return redirect(url_for('index'))
+		if not _user_can_view_order(current_user.id, order):
+			flash('You do not have permission to view this order.', 'warning')
+			return redirect(url_for('purchases'))
 		return render_template('order_detail.html', order=order, title='Order Details')
 
 
@@ -1439,6 +1520,8 @@ def create_app() -> Flask:
 		order = db.session.get(OrderModel, order_id)
 		if order is None:
 			return {'error': 'not found'}, 404
+		if not _user_can_view_order(current_user.id, order):
+			return {'error': 'forbidden'}, 403
 		return {
 			'order_id': order.id,
 			'tracking_status': order.tracking_status,
