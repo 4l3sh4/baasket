@@ -1,39 +1,40 @@
 ============================================================
-  Baasket — Observer Pattern Demo (Live Database)
-  Run at: 2026-06-18 00:14:29
+  Baasket — Observer Pattern Demo (GoF Compliant)
+  Run at: 2026-06-18 21:55:38
 ============================================================
 
 [INFO] Using buyer  → id=1  username=baasket
-[INFO] Using seller → id=2  username=buyer1
+[INFO] Using seller → id=2  username=mei_ling87
 
-[STEP 1] Building NotificationSubject and attaching observers...
-  [attach] BuyerNotificationObserver registered.
-  [attach] SellerNotificationObserver registered.
+[STEP 1] Build NotificationSubject + Attach observers
+  [Attach] BuyerNotificationObserver registered.
+  [Attach] SellerNotificationObserver registered.
 
-[INFO] Notifications in database before demo: 29
+[INFO] Notifications in database BEFORE demo: 4
 
-[STEP 2] Firing event: offer_accepted
+[STEP 2] Subject.SetState('offer_accepted') → Notify() → Observer.Update() → GetState()
   → db.session.commit() — notifications saved to baasket.db
 
-[STEP 3] Firing event: offer_declined
+[STEP 3] Subject.SetState('offer_declined') → Notify() → Observer.Update() → GetState()
   → db.session.commit() — notification saved to baasket.db
 
-[STEP 4] Firing event: purchase
+[STEP 4] Subject.SetState('purchase') → Notify() → Observer.Update() → GetState()
   → db.session.commit() — notification saved to baasket.db
 
-[INFO] Notifications in database after demo: 33
+[INFO] Notifications in database AFTER demo: 8
 [INFO] New notifications created: 4
 
 [RESULT] New notifications written to baasket.db:
-  id=30 | user_id=1 | category=offer_accepted
+  id=5 | user_id=1 | category=offer_accepted
          message: Your offer of RM140.00 on "Smart Watch Series" was accepted!
-  id=31 | user_id=2 | category=offer_accepted
+  id=6 | user_id=2 | category=offer_accepted
          message: You accepted an offer of RM140.00 on "Smart Watch Series".
-  id=32 | user_id=1 | category=offer_declined
+  id=7 | user_id=1 | category=offer_declined
          message: Your offer of RM90.00 on "Vintage Camera" was declined.
-  id=33 | user_id=2 | category=purchase
+  id=8 | user_id=2 | category=purchase
          message: Your listing "Smart Watch Series" was purchased!
 
 ============================================================
-  Observer pattern executed successfully with real data.
+  GoF Observer pattern executed with real database.
+  Flow: SetState() → Notify() → Update() → GetState()
 ============================================================

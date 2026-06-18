@@ -336,7 +336,6 @@ def _persist_order(
 	receipt: PaymentReceipt,
 	note: str,
 	lines: list[OrderLine],
-	buyer_id: int | None = None,
 	offer_id: int | None = None,
 ) -> OrderModel:
 	order = OrderModel()
@@ -1119,7 +1118,6 @@ def create_app() -> Flask:
 			receipt=receipt,
 			note=note,
 			lines=order_lines,
-			buyer_id=current_user.id,
 		)
 		_mark_listings_sold(order_lines, current_user.id)
 		db.session.commit()
@@ -1221,7 +1219,6 @@ def create_app() -> Flask:
 			receipt=receipt,
 			note=note,
 			lines=order_lines,
-			buyer_id=current_user.id,
 			offer_id=offer.id,
 		)
 		_mark_listings_sold(order_lines, current_user.id)
