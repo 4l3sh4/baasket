@@ -64,30 +64,71 @@
             <span class="select-arrow">▾</span>
           </div>
         </label>
-
-        <label>
-          Listing type
-          <div class="select-wrap">
-            <select name="kind">
-              <option value="standard" {% if listing.kind == 'standard' %}selected{% endif %}>Standard</option>
-              <option value="fresh"    {% if listing.kind == 'fresh'    %}selected{% endif %}>Fresh Drop</option>
-              <option value="featured" {% if listing.kind == 'featured' %}selected{% endif %}>Featured</option>
-              <option value="limited"  {% if listing.kind == 'limited'  %}selected{% endif %}>Limited Stock</option>
-            </select>
-            <span class="select-arrow">▾</span>
-          </div>
-        </label>
       </div>
 
-      <label>
-        Location
-        <input type="text" name="location" value="{{ listing.location }}">
-      </label>
+      <!-- ── Deal Methods ────────────────────────────────────────────── -->
+      <div class="form-group" id="deal-method-section">
+        <p class="form-label">Deal method <span class="field-hint">choose at least one — you can pick both</span></p>
 
-      <label>
-        Tags <span class="field-hint">separate with commas</span>
-        <input type="text" name="tags" value="{{ listing.tags | join(', ') }}">
-      </label>
+        <!-- Saved deal methods as re-usable chips -->
+        {% if saved_deal_methods %}
+        <div class="deal-saved-header">
+          <span class="field-hint">Your saved methods — click to reuse</span>
+        </div>
+        <div class="deal-chips" id="deal-chips">
+          {% for dm in saved_deal_methods %}
+          <label class="deal-chip" title="{{ dm.summary }}">
+            <input type="checkbox" name="deal_method_saved[]" value="{{ dm.dealMethodID }}" class="deal-chip-cb">
+            <span class="deal-chip-icon">{{ '📍' if dm.is_meetup else '📦' }}</span>
+            <span class="deal-chip-label">
+              <strong>{{ dm.methodType }}</strong>
+              <span>{{ dm.summary }}</span>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Current deal methods pre-populated as editable blocks -->
+        <div id="deal-method-blocks">
+          {% for dm in listing.deal_methods %}
+            <div class="deal-method-block" data-existing="1">
+              <input type="hidden" name="deal_method_new_type[]" value="{{ dm.methodType }}">
+              <div class="deal-method-block-header">
+                <strong>{{ '📍' if dm.is_meetup else '📦' }} {{ dm.methodType }}</strong>
+                <button type="button" class="deal-block-remove" aria-label="Remove this deal method">&times;</button>
+              </div>
+              <div class="deal-method-fields">
+                {% if dm.is_meetup %}
+                  <label>
+                    Meet-up location
+                    <input type="text" name="deal_method_meetup_loc[]" value="{{ dm.meetupLocation or '' }}" placeholder="e.g. Sunway Pyramid, PJ" required>
+                  </label>
+                {% else %}
+                  <label>
+                    Carrier name
+                    <input type="text" name="deal_method_carrier[]" value="{{ dm.carrierName or '' }}" placeholder="e.g. J&T Express, Pos Laju" required>
+                  </label>
+                  <label>
+                    Delivery fee (RM)
+                    <div class="price-input-wrap">
+                      <span class="price-prefix">RM</span>
+                      <input type="number" name="deal_method_delivery_fee[]" step="0.01" min="0" value="{{ '%.2f' % (dm.price or 0) }}" placeholder="0.00">
+                    </div>
+                  </label>
+                {% endif %}
+                <!-- Hidden save flag = 0 for pre-populated blocks (already saved if needed) -->
+                <input type="hidden" name="deal_method_save[]" value="0">
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+
+        <div class="deal-add-row">
+          <button type="button" class="ghost-button" id="add-meetup-btn">+ Meet Up</button>
+          <button type="button" class="ghost-button" id="add-delivery-btn">+ Delivery</button>
+        </div>
+      </div>
 
       <label>
         Photos <span class="field-hint">remove existing photos or add new ones — up to {{ max_images }} total</span>
@@ -136,6 +177,7 @@
 
 <script>
 (function () {
+  /* ── Category / subcategory ───────────────────────────────────────── */
   var CATS = {{ categories_map | tojson }};
   var CURRENT_SUB = {{ (listing.subcategory if listing.subcategory is defined else '') | tojson }};
 
@@ -148,8 +190,7 @@
     subSel.innerHTML = '<option value="">— none —</option>';
     subs.forEach(function (s) {
       var opt = document.createElement('option');
-      opt.value = s;
-      opt.textContent = s;
+      opt.value = s; opt.textContent = s;
       if (s === preserve) opt.selected = true;
       subSel.appendChild(opt);
     });
@@ -159,10 +200,11 @@
   catSel.addEventListener('change', function () { refreshSubs(''); });
   if (catSel.value) refreshSubs(CURRENT_SUB);
 
-  var zone  = document.getElementById('file-drop-zone');
-  var inp   = document.getElementById('image-input');
-  var inner = document.getElementById('file-drop-inner');
-  var grid  = document.getElementById('image-preview-grid');
+  /* ── Image upload / preview ───────────────────────────────────────── */
+  var zone      = document.getElementById('file-drop-zone');
+  var inp       = document.getElementById('image-input');
+  var inner     = document.getElementById('file-drop-inner');
+  var grid      = document.getElementById('image-preview-grid');
   var countHint = document.getElementById('image-count-hint');
   var MAX_IMAGES = {{ max_images | tojson }};
   var existingCells = Array.prototype.slice.call(document.querySelectorAll('#existing-image-grid .image-preview-cell'));
@@ -202,7 +244,7 @@
   function renderPreviews() {
     grid.innerHTML = '';
     pendingFiles.forEach(function (file, index) {
-      var url = URL.createObjectURL(file);
+      var url  = URL.createObjectURL(file);
       var cell = document.createElement('div');
       cell.className = 'image-preview-cell image-preview-cell--new';
       cell.innerHTML =
@@ -215,7 +257,6 @@
       });
       grid.appendChild(cell);
     });
-
     if (pendingFiles.length) {
       inner.innerHTML = '<span class="file-drop-icon">\u2705</span><span class="file-drop-text">' + pendingFiles.length + ' new photo' + (pendingFiles.length === 1 ? '' : 's') + ' selected</span>';
     } else {
@@ -225,13 +266,9 @@
   }
 
   function addFiles(fileList) {
-    var incoming = Array.prototype.slice.call(fileList).filter(function (f) {
-      return f.type.indexOf('image/') === 0;
-    });
+    var incoming = Array.prototype.slice.call(fileList).filter(function (f) { return f.type.indexOf('image/') === 0; });
     var room = MAX_IMAGES - existingRemainingCount() - pendingFiles.length;
-    if (incoming.length > room) {
-      window.alert('A listing can have at most ' + MAX_IMAGES + ' images. Only ' + Math.max(room, 0) + ' of the new files were added — remove an existing photo to add more.');
-    }
+    if (incoming.length > room) window.alert('A listing can have at most ' + MAX_IMAGES + ' images. Only ' + Math.max(room, 0) + ' of the new files were added.');
     pendingFiles = pendingFiles.concat(incoming.slice(0, Math.max(room, 0)));
     syncInput();
     renderPreviews();
@@ -248,6 +285,104 @@
   });
 
   updateCountHint();
+
+  /* ── Deal method blocks ───────────────────────────────────────────── */
+  var blocksEl = document.getElementById('deal-method-blocks');
+
+  // Wire up remove buttons on pre-populated blocks
+  Array.prototype.slice.call(blocksEl.querySelectorAll('.deal-block-remove')).forEach(function (btn) {
+    btn.addEventListener('click', function () { btn.closest('.deal-method-block').remove(); });
+  });
+
+  function makeDealBlock(type) {
+    var block = document.createElement('div');
+    block.className = 'deal-method-block';
+
+    var typeInput = document.createElement('input');
+    typeInput.type  = 'hidden';
+    typeInput.name  = 'deal_method_new_type[]';
+    typeInput.value = type;
+    block.appendChild(typeInput);
+
+    var header = document.createElement('div');
+    header.className = 'deal-method-block-header';
+    var icon = type === 'Meet Up' ? '📍' : '📦';
+    var title = document.createElement('strong');
+    title.textContent = icon + ' ' + type;
+    header.appendChild(title);
+    var removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'deal-block-remove';
+    removeBtn.innerHTML = '&times;';
+    removeBtn.setAttribute('aria-label', 'Remove this deal method');
+    removeBtn.addEventListener('click', function () { block.remove(); });
+    header.appendChild(removeBtn);
+    block.appendChild(header);
+
+    var fields = document.createElement('div');
+    fields.className = 'deal-method-fields';
+
+    if (type === 'Meet Up') {
+      var locLabel = document.createElement('label');
+      locLabel.textContent = 'Meet-up location';
+      var locInput = document.createElement('input');
+      locInput.type        = 'text';
+      locInput.name        = 'deal_method_meetup_loc[]';
+      locInput.placeholder = 'e.g. Sunway Pyramid, PJ';
+      locInput.required    = true;
+      locLabel.appendChild(locInput);
+      fields.appendChild(locLabel);
+    } else {
+      var carrierLabel = document.createElement('label');
+      carrierLabel.textContent = 'Carrier name';
+      var carrierInput = document.createElement('input');
+      carrierInput.type        = 'text';
+      carrierInput.name        = 'deal_method_carrier[]';
+      carrierInput.placeholder = 'e.g. J&T Express, Pos Laju';
+      carrierInput.required    = true;
+      carrierLabel.appendChild(carrierInput);
+      fields.appendChild(carrierLabel);
+
+      var feeLabel = document.createElement('label');
+      feeLabel.textContent = 'Delivery fee (RM)';
+      var feeWrap = document.createElement('div');
+      feeWrap.className = 'price-input-wrap';
+      var feePrefix = document.createElement('span');
+      feePrefix.className = 'price-prefix';
+      feePrefix.textContent = 'RM';
+      var feeInput = document.createElement('input');
+      feeInput.type        = 'number';
+      feeInput.name        = 'deal_method_delivery_fee[]';
+      feeInput.step        = '0.01';
+      feeInput.min         = '0';
+      feeInput.value       = '0.00';
+      feeInput.placeholder = '0.00';
+      feeWrap.appendChild(feePrefix);
+      feeWrap.appendChild(feeInput);
+      feeLabel.appendChild(feeWrap);
+      fields.appendChild(feeLabel);
+    }
+
+    var saveLabel = document.createElement('label');
+    saveLabel.className = 'deal-save-label';
+    var saveCb = document.createElement('input');
+    saveCb.type  = 'checkbox';
+    saveCb.name  = 'deal_method_save[]';
+    saveCb.value = '1';
+    saveLabel.appendChild(saveCb);
+    saveLabel.appendChild(document.createTextNode(' Save this method for future listings'));
+    fields.appendChild(saveLabel);
+
+    block.appendChild(fields);
+    return block;
+  }
+
+  document.getElementById('add-meetup-btn').addEventListener('click', function () {
+    blocksEl.appendChild(makeDealBlock('Meet Up'));
+  });
+  document.getElementById('add-delivery-btn').addEventListener('click', function () {
+    blocksEl.appendChild(makeDealBlock('Delivery'));
+  });
 })();
 </script>
 {% endblock %}

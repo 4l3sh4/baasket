@@ -124,8 +124,11 @@
 
       <div class="price-row listing-price-row">
         <strong class="detail-price">{{ listing.price|money }}</strong>
+        {% if listing.delivery_fee %}
+          <span class="field-hint"> + {{ listing.delivery_fee|money }} delivery</span>
+        {% endif %}
       </div>
-      <p class="subtle">&#127991;&#65039; {{ "Listing price is fixed" if listing.buyable else "Not currently available for purchase" }}</p>
+      <p class="subtle">&#127991;&#65039; {{ "Available for direct purchase" if listing.buyable else "Meet up only — not available for online purchase" }}</p>
 
       <div class="action-row listing-secondary-actions">
         {% if is_owner %}
@@ -173,11 +176,21 @@
 
     <article class="card-surface listing-block">
       <h2>Deal method</h2>
-      <div class="seller-context">
-        <span><strong>Meet-up</strong></span>
-        <span>Free</span>
-      </div>
-      <p class="subtle" style="margin-top:10px;">{{ listing.location or "Local pickup" }}</p>
+      {% if listing.deal_methods %}
+        {% for dm in listing.deal_methods %}
+          <div class="seller-context" style="margin-top: {% if not loop.first %}12px{% else %}0{% endif %};">
+            <span><strong>{{ dm.methodType }}</strong></span>
+            <span>{{ dm.price_label if dm.is_delivery else "Free" }}</span>
+          </div>
+          {% if dm.is_meetup %}
+            <p class="subtle" style="margin-top:6px;">📍 {{ dm.meetupLocation or "Location TBD" }}</p>
+          {% else %}
+            <p class="subtle" style="margin-top:6px;">📦 {{ dm.carrierName or "Carrier TBD" }}{% if dm.price %} · {{ dm.price_label }}{% endif %}</p>
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        <p class="subtle">No deal method set yet.</p>
+      {% endif %}
     </article>
 
     <article class="card-surface listing-block">
@@ -321,7 +334,7 @@
       {% elif is_sold %}
         <p class="subtle">This item has already been sold.</p>
       {% elif not listing.buyable %}
-        <p class="subtle">{{ "Reserved for another buyer right now." if listing.reserved else "Not available for direct purchase right now." }}</p>
+        <p class="subtle">{{ "Reserved for another buyer right now." if listing.reserved else "This listing is meet up only — contact the seller to arrange." }}</p>
       {% elif current_user.is_authenticated and current_user.is_admin %}
         <p class="subtle">Admin accounts can't buy listings.</p>
       {% else %}

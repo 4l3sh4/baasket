@@ -14,7 +14,7 @@
         <img src="{{ listing.image_data }}" alt="{{ listing.title }}">
         <div>
           <h3>{{ listing.title }}</h3>
-          <p>{{ listing.condition }} · {{ listing.location }} · <a href="{{ url_for('seller_profile', user_id=listing.seller_id) }}">{{ listing.seller_name }}</a></p>
+          <p>{{ listing.condition }} · {{ listing.deal_summary }} · <a href="{{ url_for('seller_profile', user_id=listing.seller_id) }}">{{ listing.seller_name }}</a></p>
           <p>
             <span style="text-decoration:line-through; opacity:0.6;">{{ listing.price|money }}</span>
             <strong style="margin-left:8px; color:#1f6f78;">{{ offer.amount_label }}</strong>

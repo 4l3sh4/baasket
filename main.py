@@ -12,11 +12,12 @@ from flask.typing import ResponseReturnValue
 from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy import or_, text
 from werkzeug.utils import secure_filename
+from werkzeug.datastructures import ImmutableMultiDict
 from typing import TypedDict
 
 from catalog import _build_art
 from extensions import db, login_manager
-from models import Item, Like, ListingImage, Notification, Offer, ShippingItemModel, ShippingModel, User, ChatSession, Message, Review, ReviewImage, Report
+from models import DealMethod, Item, Like, ListingImage, Notification, Offer, ShippingItemModel, ShippingModel, User, ChatSession, Message, Review, ReviewImage, Report
 from notifications import build_notification_subject
 from logistics_v2.flask_adapter import run_checkout_logistics_v2
 from offers import OfferBoard, get_redeemable_offer
@@ -272,6 +273,133 @@ def _money(value: object) -> str:
 	return f"RM{amount:,.2f}"
 
 
+def _parse_deal_methods_from_form(form: "ImmutableMultiDict", seller_id: int) -> list[dict]:
+	"""Parse deal method data from the sell/edit-listing form POST.
+
+	The form submits zero or more deal method blocks. Each block is one of:
+
+	  • A saved method the seller re-uses:
+	      deal_method_saved[] = "<dealMethodID>"
+
+	  • A new Meet Up method the seller is defining inline:
+	      deal_method_new_type[]     = "Meet Up"
+	      deal_method_meetup_loc[]   = "PJ, Selangor"
+	      deal_method_save[]         = "1"   (optional — save as reusable template)
+
+	  • A new Delivery method:
+	      deal_method_new_type[]     = "Delivery"
+	      deal_method_carrier[]      = "J&T Express"
+	      deal_method_delivery_fee[] = "5.00"
+	      deal_method_save[]         = "1"   (optional)
+
+	Returns a list of payload dicts ready for _attach_deal_methods().
+	Each dict has keys: methodType, meetupLocation, carrierName, price, save (bool),
+	and optionally saved_id (if re-using an existing saved template).
+	"""
+	payloads: list[dict] = []
+
+	# Re-used saved templates
+	for saved_id in form.getlist("deal_method_saved[]"):
+		saved_id = saved_id.strip()
+		if saved_id:
+			dm = db.session.get(DealMethod, saved_id)
+			if dm and dm.seller_id == seller_id and dm.item_id is None:
+				p = dm.as_template_payload()
+				p["save"] = False
+				p["saved_id"] = saved_id
+				payloads.append(p)
+
+	# Inline new methods
+	types = form.getlist("deal_method_new_type[]")
+	locations = form.getlist("deal_method_meetup_loc[]")
+	carriers = form.getlist("deal_method_carrier[]")
+	fees = form.getlist("deal_method_delivery_fee[]")
+	saves = form.getlist("deal_method_save[]")
+
+	loc_idx = car_idx = 0
+	for i, method_type in enumerate(types):
+		method_type = method_type.strip()
+		if method_type not in DealMethod.TYPES:
+			continue
+		save_flag = i < len(saves) and saves[i] == "1"
+
+		if method_type == DealMethod.MEETUP:
+			loc = locations[loc_idx].strip() if loc_idx < len(locations) else ""
+			loc_idx += 1
+			if not loc:
+				continue
+			payloads.append({
+				"methodType": DealMethod.MEETUP,
+				"meetupLocation": loc,
+				"carrierName": None,
+				"price": 0.0,
+				"save": save_flag,
+			})
+		else:  # Delivery
+			carrier = carriers[car_idx].strip() if car_idx < len(carriers) else ""
+			car_idx += 1
+			fee_text = fees[car_idx - 1] if car_idx - 1 < len(fees) else "0"
+			try:
+				fee = float(fee_text)
+			except (ValueError, TypeError):
+				fee = 0.0
+			if not carrier:
+				continue
+			payloads.append({
+				"methodType": DealMethod.DELIVERY,
+				"meetupLocation": None,
+				"carrierName": carrier,
+				"price": fee,
+				"save": save_flag,
+			})
+
+	return payloads
+
+
+def _attach_deal_methods(
+	listing: "Item",
+	payloads: list[dict],
+	seller_id: int,
+	save_new: bool = False,
+) -> None:
+	"""Create DealMethod attachment rows for the given listing.
+
+	For each payload:
+	  - Always creates a fresh attachment row (item_id = listing.id) so that
+	    editing a listing's deal methods later never mutates saved templates.
+	  - If payload["save"] is True (and save_new is True), also creates a
+	    separate template row (item_id = None) owned by the seller, which will
+	    appear as a reusable chip on future sell/edit pages.
+	"""
+	for p in payloads:
+		# Attachment row
+		attachment = DealMethod(
+			dealMethodID=uuid4().hex,
+			methodType=p["methodType"],
+			meetupLocation=p.get("meetupLocation"),
+			carrierName=p.get("carrierName"),
+			price=p.get("price", 0.0),
+			seller_id=seller_id,
+			item_id=listing.id,
+		)
+		db.session.add(attachment)
+		listing.deal_methods.append(attachment)
+
+		# Optionally persist as a reusable template (save_new gate lets tests
+		# call _attach_deal_methods without triggering template creation)
+		if save_new and p.get("save"):
+			template = DealMethod(
+				dealMethodID=uuid4().hex,
+				methodType=p["methodType"],
+				meetupLocation=p.get("meetupLocation"),
+				carrierName=p.get("carrierName"),
+				price=p.get("price", 0.0),
+				seller_id=seller_id,
+				item_id=None,
+			)
+			db.session.add(template)
+
+
 TRACKING_STATUS_LABELS = {
 	"paid": "Processing",
 	"packed": "Preparing shipping",
@@ -382,6 +510,7 @@ def _mark_listings_sold(lines: list[ShippingLine], buyer_id: int) -> None:
 	for line in lines:
 		listing = line["listing"]
 		listing.buyer_id = buyer_id
+		# Clear deal methods so buyable syncs to False
 		listing.buyable = False
 
 
@@ -400,7 +529,10 @@ def _create_cart_lines() -> tuple[list[CartLine], Decimal]:
 			# instead of being shown or charged for.
 			continue
 		sellable_ids.add(listing_id)
-		line_total = Decimal(listing.price) * quantity
+		# Include delivery fee (0 for meet-up-only listings)
+		item_price = Decimal(str(listing.price))
+		delivery_fee = listing.delivery_fee
+		line_total = (item_price + delivery_fee) * quantity
 		subtotal += line_total
 		lines.append({"listing": listing, "quantity": quantity, "line_total": line_total})
 
@@ -425,7 +557,6 @@ def _search_listings(search: str = "", category: str = "") -> list[Item]:
 				Item.title.ilike(pattern),
 				Item.category.ilike(pattern),
 				Item.condition.ilike(pattern),
-				Item.location.ilike(pattern),
 				Item.description.ilike(pattern),
 			)
 		)
@@ -993,10 +1124,8 @@ def create_app() -> Flask:
 			subcategory = request.form.get("subcategory", "").strip()
 			price_text = request.form.get("price", "").strip()
 			condition = request.form.get("condition", "").strip() or "Good"
-			condition = condition[:15]  # enforce VARCHAR(10)
-			location = request.form.get("location", "").strip() or "Local pickup"
+			condition = condition[:15]
 			description = request.form.get("description", "").strip()[:1000]
-			buyable  = request.form.get("buyable",  "1") == "1"
 
 			if not title or not category or not price_text or not description:
 				flash("Title, category, price, and description are required.", "warning")
@@ -1016,6 +1145,12 @@ def create_app() -> Flask:
 				flash("Enter a valid asking price.", "warning")
 				return redirect(url_for("sell"))
 
+			# ── Deal methods ────────────────────────────────────────────────
+			deal_methods_payload = _parse_deal_methods_from_form(request.form, current_user.id)
+			if not deal_methods_payload:
+				flash("Please add at least one deal method (Meet Up or Delivery).", "warning")
+				return redirect(url_for("sell"))
+
 			uploaded_files = [f for f in request.files.getlist("images") if getattr(f, "filename", "")]
 			if len(uploaded_files) > Item.MAX_IMAGES:
 				flash(f"You can upload up to {Item.MAX_IMAGES} images per listing — only the first {Item.MAX_IMAGES} were used.", "warning")
@@ -1029,23 +1164,34 @@ def create_app() -> Flask:
 			listing.subcategory = subcategory
 			listing.price = price
 			listing.condition = condition
-			listing.location = location
 			listing.description = description
 			listing.image_path = ""
 			listing.seed_image_data = seed_image_data
-			listing.buyable = buyable
 			for position, image_path in enumerate(image_paths):
 				listing.images.append(ListingImage(image_path=image_path, position=position))
 			db.session.add(listing)
+			db.session.flush()  # get listing.id before attaching deal methods
+
+			_attach_deal_methods(listing, deal_methods_payload, current_user.id, save_new=True)
+			listing.sync_buyable()
+
 			db.session.commit()
 			flash("Your listing is now live on Baasket.", "success")
 			return redirect(url_for("listing_detail", listing_id=listing.id))
 
+		# GET — pass the seller's saved deal methods so they can be shown as chips
+		saved_deal_methods = (
+			DealMethod.query
+			.filter_by(seller_id=current_user.id, item_id=None)
+			.order_by(DealMethod.created_at.desc())
+			.all()
+		)
 		return render_template(
 			"sell.html",
 			title="Sell on Baasket",
 			categories_map=CATEGORIES_MAP,
 			max_images=Item.MAX_IMAGES,
+			saved_deal_methods=saved_deal_methods,
 		)
 
 	@app.get("/cart")
@@ -1098,7 +1244,9 @@ def create_app() -> Flask:
 				"listing": line["listing"],
 				"quantity": line["quantity"],
 				"line_total": line["line_total"],
-				"unit_price": Decimal(str(line["listing"].price)),
+				# unit_price = item price + delivery fee so ShippingItemModel
+				# records what was actually charged per unit (qty is usually 1)
+				"unit_price": Decimal(str(line["listing"].price)) + line["listing"].delivery_fee,
 			}
 			for line in lines
 		]
@@ -1674,7 +1822,6 @@ def create_app() -> Flask:
 
 			listing.title = request.form.get("title", "").strip() or listing.title
 			listing.condition = request.form.get("condition", "").strip() or listing.condition
-			listing.location = request.form.get("location", "").strip() or listing.location
 			listing.description = request.form.get("description", "").strip() or listing.description
 
 			price_text = request.form.get("price", "").strip()
@@ -1685,8 +1832,20 @@ def create_app() -> Flask:
 					flash("Enter a valid price.", "warning")
 					return redirect(url_for("edit_listing", listing_id=listing.id))
 
-			# Existing images the seller chose to remove (checkboxes posted as
-			# "remove_image" with the ListingImage id as the value).
+			# ── Deal methods ────────────────────────────────────────────────
+			deal_methods_payload = _parse_deal_methods_from_form(request.form, current_user.id)
+			if not deal_methods_payload:
+				flash("Please keep at least one deal method (Meet Up or Delivery).", "warning")
+				return redirect(url_for("edit_listing", listing_id=listing.id))
+
+			# Drop all existing attached deal methods and replace them
+			for dm in list(listing.deal_methods):
+				db.session.delete(dm)
+			listing.deal_methods.clear()
+			_attach_deal_methods(listing, deal_methods_payload, current_user.id, save_new=True)
+			listing.sync_buyable()
+
+			# Existing images the seller chose to remove
 			remove_ids = {int(value) for value in request.form.getlist("remove_image") if value.isdigit()}
 			remaining_images = [img for img in sorted(listing.images, key=lambda i: i.position) if img.id not in remove_ids]
 			for img in list(listing.images):
@@ -1713,12 +1872,20 @@ def create_app() -> Flask:
 			flash("Listing updated.", "success")
 			return redirect(url_for("listing_detail", listing_id=listing.id))
 
+		# GET — pass the seller's saved deal methods as chips
+		saved_deal_methods = (
+			DealMethod.query
+			.filter_by(seller_id=current_user.id, item_id=None)
+			.order_by(DealMethod.created_at.desc())
+			.all()
+		)
 		return render_template(
 			"edit_listing.html",
 			title="Edit Listing | Baasket",
 			listing=listing,
 			categories_map=CATEGORIES_MAP,
 			max_images=Item.MAX_IMAGES,
+			saved_deal_methods=saved_deal_methods,
 		)
 
 	@app.post("/dashboard/listings/<int:listing_id>/delete")

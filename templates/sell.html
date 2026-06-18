@@ -68,22 +68,36 @@
         </label>
       </div>
 
-      <label>
-        Location
-        <input type="text" name="location" placeholder="e.g. Petaling Jaya, KL">
-      </label>
+      <!-- ── Deal Methods ────────────────────────────────────────────── -->
+      <div class="form-group" id="deal-method-section">
+        <p class="form-label">Deal method <span class="field-hint">choose at least one — you can pick both</span></p>
 
-      <div class="form-two-col">
-        <label class="toggle-label">
-          <div class="toggle-label-text">
-            <span>Buyable</span>
-            <span class="field-hint">Can be purchased via delivery or mailing</span>
-          </div>
-          <div class="toggle-wrap">
-            <input type="checkbox" name="buyable" value="1" id="buyable-toggle" checked class="toggle-input">
-            <label for="buyable-toggle" class="toggle-slider"></label>
-          </div>
-        </label>
+        <!-- Saved deal methods as re-usable chips -->
+        {% if saved_deal_methods %}
+        <div class="deal-saved-header">
+          <span class="field-hint">Your saved methods — click to reuse</span>
+        </div>
+        <div class="deal-chips" id="deal-chips">
+          {% for dm in saved_deal_methods %}
+          <label class="deal-chip" title="{{ dm.summary }}">
+            <input type="checkbox" name="deal_method_saved[]" value="{{ dm.dealMethodID }}" class="deal-chip-cb">
+            <span class="deal-chip-icon">{{ '📍' if dm.is_meetup else '📦' }}</span>
+            <span class="deal-chip-label">
+              <strong>{{ dm.methodType }}</strong>
+              <span>{{ dm.summary }}</span>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Inline new method blocks -->
+        <div id="deal-method-blocks"></div>
+
+        <div class="deal-add-row">
+          <button type="button" class="ghost-button" id="add-meetup-btn">+ Meet Up</button>
+          <button type="button" class="ghost-button" id="add-delivery-btn">+ Delivery</button>
+        </div>
       </div>
 
       <label>
@@ -137,14 +151,21 @@
           <p>Check similar listings first. Offers are always welcome once you're live.</p>
         </div>
       </article>
+      <article class="feed-item">
+        <span class="feed-dot"></span>
+        <div>
+          <strong>Deal method matters</strong>
+          <p>Adding a Delivery method lets buyers check out instantly. Meet Up is great for bulky or local items.</p>
+        </div>
+      </article>
     </div>
   </aside>
 </section>
 
 <script>
 (function () {
-  var CATS = {{ categories_map | tojson }};
-
+  /* ── Category / subcategory ───────────────────────────────────────── */
+  var CATS    = {{ categories_map | tojson }};
   var catSel  = document.getElementById('category-select');
   var subWrap = document.getElementById('subcategory-label');
   var subSel  = document.getElementById('subcategory-select');
@@ -154,33 +175,32 @@
     subSel.innerHTML = '<option value="" disabled selected>Select a subcategory\u2026</option>';
     subs.forEach(function (s) {
       var opt = document.createElement('option');
-      opt.value = s;
-      opt.textContent = s;
+      opt.value = s; opt.textContent = s;
       subSel.appendChild(opt);
     });
     subWrap.style.display = subs.length ? '' : 'none';
   }
-
   catSel.addEventListener('change', refreshSubs);
 
-  var zone  = document.getElementById('file-drop-zone');
-  var inp   = document.getElementById('image-input');
-  var inner = document.getElementById('file-drop-inner');
-  var grid  = document.getElementById('image-preview-grid');
+  /* ── Image upload / preview ───────────────────────────────────────── */
+  var zone      = document.getElementById('file-drop-zone');
+  var inp       = document.getElementById('image-input');
+  var inner     = document.getElementById('file-drop-inner');
+  var grid      = document.getElementById('image-preview-grid');
   var countHint = document.getElementById('image-count-hint');
   var MAX_IMAGES = {{ max_images | tojson }};
   var pendingFiles = [];
 
   function syncInput() {
     var dt = new DataTransfer();
-    pendingFiles.forEach(function (file) { dt.items.add(file); });
+    pendingFiles.forEach(function (f) { dt.items.add(f); });
     inp.files = dt.files;
   }
 
   function renderPreviews() {
     grid.innerHTML = '';
     pendingFiles.forEach(function (file, index) {
-      var url = URL.createObjectURL(file);
+      var url  = URL.createObjectURL(file);
       var cell = document.createElement('div');
       cell.className = 'image-preview-cell' + (index === 0 ? ' is-cover' : '');
       cell.innerHTML =
@@ -194,23 +214,18 @@
       });
       grid.appendChild(cell);
     });
-
     if (pendingFiles.length) {
       inner.innerHTML = '<span class="file-drop-icon">\u2705</span><span class="file-drop-text">' + pendingFiles.length + ' photo' + (pendingFiles.length === 1 ? '' : 's') + ' selected</span>';
     } else {
-      inner.innerHTML = '<span class="file-drop-icon">\ud83d\udcf7</span><span class="file-drop-text">Click to upload or drag images here</span><span class="file-drop-hint">JPG, PNG, WEBP up to 10 MB each — up to ' + MAX_IMAGES + ' images, first photo is the cover</span>';
+      inner.innerHTML = '<span class="file-drop-icon">\ud83d\udcf7</span><span class="file-drop-text">Click to upload or drag images here</span><span class="file-drop-hint">JPG, PNG, WEBP up to 10 MB each \u2014 up to ' + MAX_IMAGES + ' images, first photo is the cover</span>';
     }
     countHint.textContent = pendingFiles.length ? (pendingFiles.length + ' / ' + MAX_IMAGES + ' images selected') : '';
   }
 
   function addFiles(fileList) {
-    var incoming = Array.prototype.slice.call(fileList).filter(function (f) {
-      return f.type.indexOf('image/') === 0;
-    });
+    var incoming = Array.prototype.slice.call(fileList).filter(function (f) { return f.type.indexOf('image/') === 0; });
     var room = MAX_IMAGES - pendingFiles.length;
-    if (incoming.length > room) {
-      window.alert('You can add up to ' + MAX_IMAGES + ' images per listing. Only the first ' + Math.max(room, 0) + ' of the new files were added.');
-    }
+    if (incoming.length > room) window.alert('You can add up to ' + MAX_IMAGES + ' images. Only the first ' + Math.max(room, 0) + ' were added.');
     pendingFiles = pendingFiles.concat(incoming.slice(0, Math.max(room, 0)));
     syncInput();
     renderPreviews();
@@ -224,6 +239,105 @@
     e.preventDefault();
     zone.classList.remove('drag-over');
     if (e.dataTransfer.files) addFiles(e.dataTransfer.files);
+  });
+
+  /* ── Deal method blocks ───────────────────────────────────────────── */
+  var blocksEl     = document.getElementById('deal-method-blocks');
+  var meetupCount  = 0;
+  var deliveryCount = 0;
+
+  function makeDealBlock(type) {
+    var block = document.createElement('div');
+    block.className = 'deal-method-block';
+
+    // Hidden field for type
+    var typeInput = document.createElement('input');
+    typeInput.type  = 'hidden';
+    typeInput.name  = 'deal_method_new_type[]';
+    typeInput.value = type;
+    block.appendChild(typeInput);
+
+    var header = document.createElement('div');
+    header.className = 'deal-method-block-header';
+
+    var icon = type === 'Meet Up' ? '📍' : '📦';
+    var title = document.createElement('strong');
+    title.textContent = icon + ' ' + type;
+    header.appendChild(title);
+
+    var removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'deal-block-remove';
+    removeBtn.innerHTML = '&times;';
+    removeBtn.setAttribute('aria-label', 'Remove this deal method');
+    removeBtn.addEventListener('click', function () { block.remove(); });
+    header.appendChild(removeBtn);
+    block.appendChild(header);
+
+    var fields = document.createElement('div');
+    fields.className = 'deal-method-fields';
+
+    if (type === 'Meet Up') {
+      var locLabel = document.createElement('label');
+      locLabel.textContent = 'Meet-up location';
+      var locInput = document.createElement('input');
+      locInput.type        = 'text';
+      locInput.name        = 'deal_method_meetup_loc[]';
+      locInput.placeholder = 'e.g. Sunway Pyramid, PJ';
+      locInput.required    = true;
+      locLabel.appendChild(locInput);
+      fields.appendChild(locLabel);
+    } else {
+      var carrierLabel = document.createElement('label');
+      carrierLabel.textContent = 'Carrier name';
+      var carrierInput = document.createElement('input');
+      carrierInput.type        = 'text';
+      carrierInput.name        = 'deal_method_carrier[]';
+      carrierInput.placeholder = 'e.g. J&T Express, Pos Laju';
+      carrierInput.required    = true;
+      carrierLabel.appendChild(carrierInput);
+      fields.appendChild(carrierLabel);
+
+      var feeLabel = document.createElement('label');
+      feeLabel.textContent = 'Delivery fee (RM)';
+      var feeWrap = document.createElement('div');
+      feeWrap.className = 'price-input-wrap';
+      var feePrefix = document.createElement('span');
+      feePrefix.className = 'price-prefix';
+      feePrefix.textContent = 'RM';
+      var feeInput = document.createElement('input');
+      feeInput.type        = 'number';
+      feeInput.name        = 'deal_method_delivery_fee[]';
+      feeInput.step        = '0.01';
+      feeInput.min         = '0';
+      feeInput.value       = '0.00';
+      feeInput.placeholder = '0.00';
+      feeWrap.appendChild(feePrefix);
+      feeWrap.appendChild(feeInput);
+      feeLabel.appendChild(feeWrap);
+      fields.appendChild(feeLabel);
+    }
+
+    // "Save for future listings" checkbox
+    var saveLabel = document.createElement('label');
+    saveLabel.className = 'deal-save-label';
+    var saveCb = document.createElement('input');
+    saveCb.type  = 'checkbox';
+    saveCb.name  = 'deal_method_save[]';
+    saveCb.value = '1';
+    saveLabel.appendChild(saveCb);
+    saveLabel.appendChild(document.createTextNode(' Save this method for future listings'));
+    fields.appendChild(saveLabel);
+
+    block.appendChild(fields);
+    return block;
+  }
+
+  document.getElementById('add-meetup-btn').addEventListener('click', function () {
+    blocksEl.appendChild(makeDealBlock('Meet Up'));
+  });
+  document.getElementById('add-delivery-btn').addEventListener('click', function () {
+    blocksEl.appendChild(makeDealBlock('Delivery'));
   });
 })();
 </script>

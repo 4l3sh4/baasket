@@ -103,7 +103,11 @@ class ListingModel(db.Model):
 
     # ── Status & engagement ───────────────────────────────────────────────────
     reserved = db.Column(db.Boolean, nullable=False, default=False)           # RESERVED bool
-    buyable  = db.Column(db.Boolean, nullable=False, default=True)            # BUYABLE  bool
+    # BUYABLE is derived, not user-set: True exactly when the listing has at
+    # least one attached 'Delivery' deal method (see DealMethod and
+    # sync_buyable() below). It's still a real column so list/search queries
+    # can filter on it directly without joining deal_method every time.
+    buyable  = db.Column(db.Boolean, nullable=False, default=False)           # BUYABLE  bool
 
     # ── Internal / legacy fields ──────────────────────────────────────────────
     # image_path / seed_image_data are kept for backward compatibility with the
@@ -112,7 +116,6 @@ class ListingModel(db.Model):
     # take priority — see image_data / gallery_images below.
     image_path     = db.Column(db.String(255), nullable=False, default="")
     seed_image_data = db.Column(db.Text,       nullable=False, default="")
-    location       = db.Column(db.String(80),  nullable=False, default="")
     quantity       = db.Column(db.Integer,     nullable=False, default=1)
     sku            = db.Column(db.String(64),  nullable=True,  default="")
     is_active      = db.Column(db.Boolean,     nullable=False, default=True)
@@ -129,6 +132,12 @@ class ListingModel(db.Model):
         order_by="ListingImage.position",
         cascade="all, delete-orphan",
     )
+    deal_methods = db.relationship(
+        "DealMethod",
+        backref="listing",
+        lazy=True,
+        cascade="all, delete-orphan",
+    )
 
     MAX_IMAGES = 10
 
@@ -139,6 +148,47 @@ class ListingModel(db.Model):
     @property
     def seller_name(self) -> str:
         return self.seller.username if self.seller else "Unknown seller"
+
+    @property
+    def meetup_methods(self) -> tuple["DealMethod", ...]:
+        return tuple(dm for dm in self.deal_methods if dm.is_meetup)
+
+    @property
+    def delivery_methods(self) -> tuple["DealMethod", ...]:
+        return tuple(dm for dm in self.deal_methods if dm.is_delivery)
+
+    @property
+    def delivery_fee(self) -> Decimal:
+        """The fee charged at checkout for delivering this listing — the
+        lowest-priced attached Delivery method, or 0 if none is attached
+        (e.g. the listing is Meet Up only)."""
+        delivery = self.delivery_methods
+        if not delivery:
+            return Decimal("0.00")
+        cheapest = min(delivery, key=lambda dm: dm.price or 0)
+        return Decimal(str(cheapest.price or 0))
+
+    @property
+    def location(self) -> str:
+        """Backward-compatible accessor: the first meet-up location attached
+        to this listing, or '' if it's delivery-only."""
+        meetup = self.meetup_methods
+        return meetup[0].meetupLocation or "" if meetup else ""
+
+    @property
+    def deal_summary(self) -> str:
+        """Short label for cards/search results, e.g. 'Meet up · PJ' or
+        'J&T Express · RM5.00', falling back to a generic note if a listing
+        somehow has no deal method attached yet."""
+        methods = list(self.deal_methods)
+        if not methods:
+            return "Deal method not set"
+        return " + ".join(dm.summary for dm in methods)
+
+    def sync_buyable(self) -> None:
+        """Recompute `buyable` from the listing's attached deal methods.
+        Call this any time deal methods are added, removed, or replaced."""
+        self.buyable = any(dm.is_delivery for dm in self.deal_methods)
 
     @property
     def image_data(self) -> str:
@@ -468,14 +518,41 @@ class Cart(db.Model):
 
 
 class DealMethod(db.Model):
+    """A way for a buyer and seller to exchange an item: either 'Meet Up'
+    (with a meetup location) or 'Delivery' (with a carrier name and an
+    optional delivery price).
+
+    Two roles, distinguished by `item_id`:
+      - Saved/reusable template (item_id is None): belongs to a seller via
+        `seller_id` and shows up as a pickable option on future listings.
+      - Attachment (item_id is set): this exact deal method is attached to
+        one specific listing. When a seller "re-uses" a saved method, a new
+        attachment row is created (copying the saved values) so editing a
+        listing's deal method later never mutates the seller's saved
+        template, and vice versa.
+    """
     __tablename__ = "deal_method"
+
+    MEETUP = "Meet Up"
+    DELIVERY = "Delivery"
+    TYPES = (MEETUP, DELIVERY)
+
     dealMethodID = db.Column(db.String(36), primary_key=True)
     methodType = db.Column(db.String(80), nullable=False)
     carrierName = db.Column(db.String(140), nullable=True)
     meetupLocation = db.Column(db.String(255), nullable=True)
     price = db.Column(db.Float, nullable=True, default=0.0)
     isDefault = db.Column(db.Boolean, nullable=False, default=False)
-    item_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=True)
+    item_id = db.Column(db.Integer, db.ForeignKey("listing_model.id"), nullable=True, index=True)
+
+    # Owning seller — set for every deal method (saved templates *and*
+    # attachments), so "my saved deal methods" is always a simple filter
+    # on seller_id, regardless of whether the row is also attached to a
+    # listing right now.
+    seller_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    seller = db.relationship("User", foreign_keys=[seller_id], backref="deal_methods")
 
     def updateDealMethod(self) -> bool:
         return True
@@ -483,6 +560,39 @@ class DealMethod(db.Model):
     def setAsDefault(self) -> bool:
         self.isDefault = True
         return True
+
+    @property
+    def is_meetup(self) -> bool:
+        return self.methodType == self.MEETUP
+
+    @property
+    def is_delivery(self) -> bool:
+        return self.methodType == self.DELIVERY
+
+    @property
+    def price_label(self) -> str:
+        if not self.price:
+            return "Free"
+        return f"RM{Decimal(str(self.price)):,.2f}"
+
+    @property
+    def summary(self) -> str:
+        """Short human-readable description shown on listing cards."""
+        if self.is_meetup:
+            return self.meetupLocation or "Meet up"
+        if self.is_delivery:
+            carrier = self.carrierName or "Delivery"
+            return f"{carrier} \u00b7 {self.price_label}"
+        return self.methodType
+
+    def as_template_payload(self) -> dict[str, object]:
+        """Values copied when this saved method is reused on a new listing."""
+        return {
+            "methodType": self.methodType,
+            "carrierName": self.carrierName,
+            "meetupLocation": self.meetupLocation,
+            "price": self.price,
+        }
 
 
 class Category(db.Model):

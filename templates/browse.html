@@ -132,7 +132,7 @@
         <div class="product-copy">
           <p class="product-category">{{ listing.subcategory or listing.category }}</p>
           <h3><a href="{{ url_for('listing_detail', listing_id=listing.id) }}">{{ listing.title }}</a></h3>
-          <p class="product-meta">{{ listing.condition }} · {{ listing.location }}</p>
+          <p class="product-meta">{{ listing.condition }} · {{ listing.deal_summary }}</p>
           <div class="price-row">
             <strong>{{ listing.price|money }}</strong>
             <span class="product-likes">&hearts; {{ listing.like_count }}</span>
