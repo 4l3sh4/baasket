@@ -51,6 +51,18 @@
         <span>Location</span>
         <strong>{{ listing.location }}</strong>
       </article>
+      {% if listing.default_deal_method %}
+      <article>
+        <span>Deal method</span>
+        <strong>
+          {% if listing.default_deal_method.methodType == 'meetup' %}
+            Meet-up{% if listing.default_deal_method.meetupLocation %} · {{ listing.default_deal_method.meetupLocation }}{% endif %}
+          {% else %}
+            Mailing{% if listing.default_deal_method.carrierName %} · {{ listing.default_deal_method.carrierName }}{% endif %}
+          {% endif %}
+        </strong>
+      </article>
+      {% endif %}
       <article>
         <span>Seller</span>
         <strong><a href="{{ url_for('seller_profile', user_id=listing.seller_id) }}">{{ listing.seller_name }}</a></strong>

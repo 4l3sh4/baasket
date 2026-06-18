@@ -113,6 +113,7 @@ class ListingModel(db.Model):
     created_at = db.synonym("listed_date")
 
     offers = db.relationship("Offer", backref="listing", lazy=True, cascade="all, delete-orphan")
+    deal_methods = db.relationship("DealMethod", backref="listing", lazy=True, cascade="all, delete-orphan")
 
     @property
     def price_label(self) -> str:
@@ -131,6 +132,13 @@ class ListingModel(db.Model):
     @property
     def offer_count(self) -> int:
         return len(self.offers)
+
+    @property
+    def default_deal_method(self) -> "DealMethod | None":
+        for method in self.deal_methods:
+            if method.isDefault:
+                return method
+        return self.deal_methods[0] if self.deal_methods else None
 
 
 class Offer(db.Model):
@@ -173,6 +181,8 @@ class OrderModel(db.Model):
     tracking_status = db.Column(db.String(40), nullable=False, default="paid")
     tracking_updated_at = db.Column(db.DateTime, nullable=True)
     offer_id = db.Column(db.Integer, db.ForeignKey("offer.id"), nullable=True, index=True)
+    payment_id = db.Column(db.String(36), db.ForeignKey("payment.paymentID"), nullable=True, index=True)
+    shipping_id = db.Column(db.String(36), db.ForeignKey("shipping.shippingID"), nullable=True, index=True)
 
     buyer = db.relationship("User", foreign_keys=[buyer_id], backref="orders")
     items = db.relationship("OrderItemModel", backref="order", lazy=True, cascade="all, delete-orphan")
@@ -391,6 +401,10 @@ class Payment(db.Model):
     paymentType = db.Column(db.String(80), nullable=False)
     status = db.Column(db.String(80), nullable=False, default="created")
     transactionDate = db.Column(db.DateTime, nullable=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("order_model.id"), nullable=True, index=True)
+    shipping_id = db.Column(db.String(36), db.ForeignKey("shipping.shippingID"), nullable=True, index=True)
+
+    shipping = db.relationship("Shipping", foreign_keys=[shipping_id], backref="payment", uselist=False)
 
     def authorizePayment(self) -> bool:
         self.status = "authorized"
@@ -421,10 +435,28 @@ class Shipping(db.Model):
     carrierName = db.Column(db.String(140), nullable=True)
     trackingNumber = db.Column(db.String(140), nullable=True)
     estimatedDeliveryDate = db.Column(db.Date, nullable=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("order_model.id"), nullable=True, index=True)
+    status = db.Column(db.String(40), nullable=False, default="created")
+    delivered_at = db.Column(db.DateTime, nullable=True)
 
-    def updateTrackingInfo(self, tracking: str) -> bool:
-        self.trackingNumber = tracking
+    order = db.relationship("OrderModel", foreign_keys=[order_id], backref="shipping_record", uselist=False)
+
+    def updateTrackingInfo(
+        self,
+        carrier_name: str,
+        tracking_number: str,
+        *,
+        estimated_delivery: date | None = None,
+    ) -> bool:
+        self.carrierName = carrier_name
+        self.trackingNumber = tracking_number
+        if estimated_delivery is not None:
+            self.estimatedDeliveryDate = estimated_delivery
+        if self.status == "created":
+            self.status = "in_transit"
         return True
 
     def confirmDelivery(self) -> bool:
+        self.status = "delivered"
+        self.delivered_at = datetime.utcnow()
         return True

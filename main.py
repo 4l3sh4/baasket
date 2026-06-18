@@ -16,7 +16,7 @@ from typing import TypedDict
 
 from catalog import ListingFactory, _build_art, build_seeded_catalog
 from extensions import db, login_manager
-from models import Item, Notification, Offer, OrderItemModel, OrderModel, User, ChatSession, Message, Review
+from models import Item, Notification, Offer, OrderItemModel, OrderModel, Payment, User, ChatSession, Message, Review, DealMethod, Shipping
 from notifications import build_notification_subject
 from logistics_v2.flask_adapter import run_checkout_logistics_v2
 from offers import OfferBoard, get_redeemable_offer
@@ -302,6 +302,20 @@ def _persist_order(
 	order.offer_id = offer_id
 	db.session.add(order)
 	db.session.flush()
+
+	payment = Payment()
+	payment.paymentID = str(uuid4())
+	payment.paymentType = receipt.strategy_code
+	payment.sender_id = buyer_id
+	payment.order_id = order.id
+	payment.offer_id = offer_id
+	if lines:
+		first = lines[0]["listing"]
+		payment.item_id = first.id
+		payment.receiver_id = first.seller_id
+	payment.authorizePayment()
+	db.session.add(payment)
+	order.payment_id = payment.paymentID
 
 	for line in lines:
 		listing = line["listing"]
@@ -609,6 +623,7 @@ def create_app() -> Flask:
 					("order_id", "INTEGER"),
 					("gateway_reference", "TEXT"),
 					("provider", "TEXT"),
+					("shipping_id", "TEXT"),
 				],
 				"notification": [
 					("category", "TEXT"),
@@ -617,6 +632,13 @@ def create_app() -> Flask:
 				],
 				"order_model": [
 					("buyer_id", "INTEGER"),
+					("payment_id", "TEXT"),
+					("shipping_id", "TEXT"),
+				],
+				"shipping": [
+					("order_id", "INTEGER"),
+					("status", "TEXT DEFAULT 'created'"),
+					("delivered_at", "TEXT"),
 				],
 			}
 
@@ -715,6 +737,8 @@ def create_app() -> Flask:
 			location = request.form.get("location", "").strip() or "Local pickup"
 			description = request.form.get("description", "").strip()[:1000]
 			buyable  = request.form.get("buyable",  "1") == "1"
+			method_type = request.form.get("method_type", "mailing").strip() or "mailing"
+			carrier_name = request.form.get("carrier_name", "Baasket Logistics").strip() or "Baasket Logistics"
 			image_path = _save_upload(request.files.get("image"), LISTING_UPLOAD_DIR)
 			seed_image_data = "" if image_path else _build_art(title[:24] or category[:24] or "Listing", "#1f6f78", "#e26d5c")
 
@@ -750,6 +774,19 @@ def create_app() -> Flask:
 			listing.likes = 0
 			listing.buyable = buyable
 			db.session.add(listing)
+			db.session.flush()
+
+			deal_method = DealMethod()
+			deal_method.dealMethodID = str(uuid4())
+			deal_method.methodType = method_type
+			deal_method.isDefault = True
+			deal_method.price = 0.0
+			deal_method.item_id = listing.id
+			if method_type == "meetup":
+				deal_method.meetupLocation = location
+			else:
+				deal_method.carrierName = carrier_name
+			db.session.add(deal_method)
 			db.session.commit()
 			flash("Your listing is now live on Baasket.", "success")
 			return redirect(url_for("listing_detail", listing_id=listing.id))
@@ -1511,7 +1548,13 @@ def create_app() -> Flask:
 		if not _user_can_view_order(current_user.id, order):
 			flash('You do not have permission to view this order.', 'warning')
 			return redirect(url_for('purchases'))
-		return render_template('order_detail.html', order=order, title='Order Details')
+		shipping = db.session.get(Shipping, order.shipping_id) if order.shipping_id else None
+		return render_template(
+			'order_detail.html',
+			order=order,
+			shipping=shipping,
+			title='Order Details',
+		)
 
 
 	@app.get('/orders/<int:order_id>/status')
@@ -1522,10 +1565,14 @@ def create_app() -> Flask:
 			return {'error': 'not found'}, 404
 		if not _user_can_view_order(current_user.id, order):
 			return {'error': 'forbidden'}, 403
+		shipping = db.session.get(Shipping, order.shipping_id) if order.shipping_id else None
 		return {
 			'order_id': order.id,
 			'tracking_status': order.tracking_status,
 			'tracking_updated_at': order.tracking_updated_at.isoformat() if order.tracking_updated_at else None,
+			'carrier_name': shipping.carrierName if shipping else None,
+			'tracking_number': shipping.trackingNumber if shipping else None,
+			'estimated_delivery': shipping.estimatedDeliveryDate.isoformat() if shipping and shipping.estimatedDeliveryDate else None,
 		}
 
 	return app

@@ -56,6 +56,15 @@
 
     <p class="tracking-status-text" id="tracking-status-text"></p>
     <p class="tracking-meta" id="tracking-meta"></p>
+    {% if shipping %}
+    <div class="shipping-meta">
+      <p><strong>Carrier:</strong> {{ shipping.carrierName or '—' }}</p>
+      <p><strong>Tracking #:</strong> {{ shipping.trackingNumber or '—' }}</p>
+      {% if shipping.estimatedDeliveryDate %}
+      <p><strong>Estimated delivery:</strong> {{ shipping.estimatedDeliveryDate.strftime('%b %d, %Y') }}</p>
+      {% endif %}
+    </div>
+    {% endif %}
   </div>
 
   <section class="order-items-panel">
@@ -102,7 +111,7 @@
   var metaEl = document.getElementById('tracking-meta');
   var nodes = progressEl.querySelectorAll('.tracking-node');
 
-  function updateTracking(status, updatedAt) {
+  function updateTracking(status, updatedAt, shippingInfo) {
     if (STEPS.indexOf(status) === -1) return;
 
     var pct = PROGRESS[status];
@@ -122,9 +131,14 @@
       statusTextEl.classList.remove('is-updating');
     });
 
-    if (updatedAt) {
-      metaEl.textContent = 'Last updated: ' + new Date(updatedAt).toLocaleString();
+    var parts = [];
+    if (shippingInfo && shippingInfo.carrier_name) parts.push('Carrier: ' + shippingInfo.carrier_name);
+    if (shippingInfo && shippingInfo.tracking_number) parts.push('Tracking: ' + shippingInfo.tracking_number);
+    if (shippingInfo && shippingInfo.estimated_delivery) {
+      parts.push('ETA: ' + new Date(shippingInfo.estimated_delivery).toLocaleDateString());
     }
+    if (updatedAt) parts.push('Last updated: ' + new Date(updatedAt).toLocaleString());
+    if (parts.length) metaEl.textContent = parts.join(' · ');
   }
 
   function fetchStatus() {
@@ -132,7 +146,7 @@
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (j.tracking_status) {
-          updateTracking(j.tracking_status, j.tracking_updated_at);
+          updateTracking(j.tracking_status, j.tracking_updated_at, j);
         }
       })
       .catch(function () {});
@@ -140,7 +154,12 @@
 
   var initialStatus = progressEl.getAttribute('data-status') || 'paid';
   var initialUpdated = {{ (order.tracking_updated_at.isoformat() | tojson) if order.tracking_updated_at else 'null' }};
-  updateTracking(initialStatus, initialUpdated);
+  var initialShipping = {
+    carrier_name: {{ (shipping.carrierName | tojson) if shipping and shipping.carrierName else 'null' }},
+    tracking_number: {{ (shipping.trackingNumber | tojson) if shipping and shipping.trackingNumber else 'null' }},
+    estimated_delivery: {{ (shipping.estimatedDeliveryDate.isoformat() | tojson) if shipping and shipping.estimatedDeliveryDate else 'null' }}
+  };
+  updateTracking(initialStatus, initialUpdated, initialShipping);
   fetchStatus();
   setInterval(fetchStatus, pollInterval);
 })();
