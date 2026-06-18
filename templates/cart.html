@@ -16,7 +16,7 @@
             <img src="{{ line.listing.image_data }}" alt="{{ line.listing.title }}">
             <div>
               <h3>{{ line.listing.title }}</h3>
-              <p>{{ line.listing.condition }} · {{ line.listing.location }} · {{ line.listing.seller_name }}</p>
+              <p>{{ line.listing.condition }} · {{ line.listing.location }} · <a href="{{ url_for('seller_profile', user_id=line.listing.seller_id) }}">{{ line.listing.seller_name }}</a></p>
               <strong>{{ line.listing.price|money }}</strong>
             </div>
             <div class="cart-controls">
@@ -36,11 +36,11 @@
         <form method="post" action="{{ url_for('checkout') }}" class="stack-form">
           <label>
             Name
-            <input type="text" name="buyer_name" placeholder="Your name" required>
+            <input type="text" name="buyer_name" value="{{ current_user.username }}" placeholder="Your name" required>
           </label>
           <label>
             Email
-            <input type="email" name="buyer_email" placeholder="you@example.com">
+            <input type="email" name="buyer_email" value="{{ current_user.email }}" placeholder="you@example.com">
           </label>
           <label>
             Payment method

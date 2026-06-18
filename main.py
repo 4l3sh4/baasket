@@ -272,6 +272,14 @@ def _money(value: object) -> str:
 	return f"RM{amount:,.2f}"
 
 
+TRACKING_STATUS_LABELS = {
+	"paid": "Processing",
+	"packed": "Preparing order",
+	"shipped": "In transit",
+	"delivered": "Completed",
+}
+
+
 def _timeago(value: object) -> str:
 	"""Render a datetime as a relative 'x ago' string, e.g. for listing posted
 	times and review timestamps."""
@@ -322,6 +330,7 @@ class OrderLine(TypedDict):
 
 def _persist_order(
 	*,
+	buyer_id: int,
 	buyer_name: str,
 	buyer_email: str,
 	receipt: PaymentReceipt,
@@ -538,6 +547,35 @@ def _sales_history_for_user(user_id: int) -> list[dict[str, object]]:
 	]
 
 
+def _user_can_view_order(user_id: int, order: OrderModel) -> bool:
+	if order.buyer_id == user_id:
+		return True
+	for item in order.items:
+		listing = db.session.get(Item, item.listing_id)
+		if listing and listing.seller_id == user_id:
+			return True
+	return False
+
+
+def _purchase_history_for_user(user_id: int) -> list[dict[str, object]]:
+	orders = (
+		OrderModel.query.filter_by(buyer_id=user_id)
+		.order_by(OrderModel.created_at.desc())
+		.all()
+	)
+	entries: list[dict[str, object]] = []
+	for order in orders:
+		first_listing = None
+		if order.items:
+			first_listing = db.session.get(Item, order.items[0].listing_id)
+		entries.append({
+			"order": order,
+			"first_listing": first_listing,
+			"extra_count": max(0, len(order.items) - 1),
+		})
+	return entries
+
+
 def _orders_for_buyer(user_id: int) -> list[OrderModel]:
 	"""All orders placed by this user, current and past, most recent first."""
 	return (
@@ -750,6 +788,9 @@ def create_app() -> Flask:
 					("is_read", "INTEGER DEFAULT 0"),
 					("related_id", "INTEGER"),
 				],
+				"order_model": [
+					("buyer_id", "INTEGER"),
+				],
 				"review": [
 					("seller_id", "INTEGER"),
 					("listing_id", "INTEGER"),
@@ -773,6 +814,28 @@ def create_app() -> Flask:
 							db.session.rollback()
 
 		_ensure_schema_columns()
+
+		def _backfill_order_buyer_ids() -> None:
+			orders = OrderModel.query.filter(OrderModel.buyer_id.is_(None)).all()
+			changed = False
+			for order in orders:
+				buyer_id = None
+				for item in order.items:
+					listing = db.session.get(Item, item.listing_id)
+					if listing and listing.buyer_id:
+						buyer_id = listing.buyer_id
+						break
+				if buyer_id is None and order.buyer_email:
+					user = User.query.filter(User.email.ilike(order.buyer_email)).first()
+					if user:
+						buyer_id = user.id
+				if buyer_id:
+					order.buyer_id = buyer_id
+					changed = True
+			if changed:
+				db.session.commit()
+
+		_backfill_order_buyer_ids()
 
 		# Seed demo data only after the schema is fully migrated, otherwise a
 		# pre-existing database (created before newer columns like
@@ -1050,6 +1113,7 @@ def create_app() -> Flask:
 			for line in lines
 		]
 		order = _persist_order(
+			buyer_id=current_user.id,
 			buyer_name=buyer_name,
 			buyer_email=buyer_email,
 			receipt=receipt,
@@ -1151,6 +1215,7 @@ def create_app() -> Flask:
 			"unit_price": offer_subtotal,
 		}]
 		order = _persist_order(
+			buyer_id=current_user.id,
 			buyer_name=buyer_name,
 			buyer_email=buyer_email,
 			receipt=receipt,
@@ -1482,6 +1547,44 @@ def create_app() -> Flask:
 		flash("You have been signed out.", "info")
 		return redirect(url_for("index"))
 
+	@app.get("/seller/<int:user_id>")
+	def seller_profile(user_id: int) -> ResponseReturnValue:
+		user = db.session.get(User, user_id)
+		if user is None:
+			flash("That seller does not exist.", "warning")
+			return redirect(url_for("index"))
+
+		listings = Item.query.filter_by(seller_id=user_id).all()
+		reviews_count = 0
+
+		return render_template(
+			"seller_profile.html",
+			title=f"{user.username}'s Storefront | Baasket",
+			user=user,
+			listings=listings,
+			reviews_count=reviews_count,
+		)
+
+	@app.post("/seller/<int:user_id>/follow")
+	@login_required
+	def seller_follow(user_id: int) -> ResponseReturnValue:
+		user = db.session.get(User, user_id)
+		if user is None:
+			flash("That seller does not exist.", "warning")
+			return redirect(url_for("index"))
+		if user.id == current_user.id:
+			flash("You cannot follow yourself.", "warning")
+			return redirect(url_for("seller_profile", user_id=user_id))
+
+		if current_user.is_following(user):
+			current_user.unfollow(user)
+			flash(f"You unfollowed {user.username}.", "info")
+		else:
+			current_user.follow(user)
+			flash(f"You are now following {user.username}.", "success")
+		db.session.commit()
+		return redirect(url_for("seller_profile", user_id=user_id))
+
 	@app.route("/dashboard", methods=["GET", "POST"])
 	@login_required
 	def dashboard() -> ResponseReturnValue:
@@ -1497,6 +1600,8 @@ def create_app() -> Flask:
 					return redirect(url_for("dashboard"))
 				current_user.username = new_username
 			current_user.bio = request.form.get("bio", "").strip()
+			current_user.home_address = request.form.get("home_address", "").strip()
+			current_user.phone_number = request.form.get("phone_number", "").strip()
 			new_profile_image = _save_upload(request.files.get("profile_image"), PROFILE_UPLOAD_DIR)
 			if new_profile_image:
 				current_user.profile_image = new_profile_image
@@ -1737,6 +1842,18 @@ def create_app() -> Flask:
 			notifications=notifs,
 		)
 
+
+	@app.get("/purchases")
+	@login_required
+	def purchases() -> ResponseReturnValue:
+		entries = _purchase_history_for_user(current_user.id)
+		return render_template(
+			"purchases.html",
+			title="My Purchases | Baasket",
+			entries=entries,
+			status_labels=TRACKING_STATUS_LABELS,
+		)
+
 	@app.get("/admin/reports")
 	@login_required
 	def admin_reports() -> ResponseReturnValue:
@@ -1856,6 +1973,8 @@ def create_app() -> Flask:
 		order = db.session.get(OrderModel, order_id)
 		if order is None:
 			return {'error': 'not found'}, 404
+		if not _user_can_view_order(current_user.id, order):
+			return {'error': 'forbidden'}, 403
 		return {
 			'order_id': order.id,
 			'tracking_status': order.tracking_status,

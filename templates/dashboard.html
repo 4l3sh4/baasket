@@ -35,60 +35,85 @@
   </div>
 </section>
 
-<!-- ── Update profile ────────────────────────────────────────────────────── -->
+<!-- ── Edit profile ─────────────────────────────────────────────────────── -->
 <section class="section-block">
   <article class="card-surface reveal" data-reveal>
     <div class="section-heading compact">
-      <h2>Update profile</h2>
-      <p>Keep your seller page fresh without leaving the dashboard.</p>
+      <div>
+        <h2>Edit profile</h2>
+        <p>Keep your seller page fresh without leaving the dashboard.</p>
+      </div>
+      <button type="button" id="edit-profile-toggle" class="secondary-button">Edit profile</button>
     </div>
 
-    <form method="post" class="stack-form" enctype="multipart/form-data">
-      <label>
-        Username
-        <input type="text" name="username" value="{{ current_user.username }}" required>
-      </label>
-      <label>
-        Bio
-        <textarea name="bio" rows="4">{{ current_user.bio }}</textarea>
-      </label>
-      <label>
-        New profile image
-        <input type="file" name="profile_image" accept="image/*">
-      </label>
-      <button type="submit" class="primary-button">Save profile</button>
-    </form>
+    <div id="profile-edit-panel" style="display:none;">
+      <form method="post" class="stack-form" enctype="multipart/form-data">
+        <label>
+          Username
+          <input type="text" name="username" value="{{ current_user.username }}" required>
+        </label>
+        <label>
+          Bio
+          <textarea name="bio" rows="4">{{ current_user.bio }}</textarea>
+        </label>
+        <label>
+          Address (optional)
+          <input type="text" name="home_address" value="{{ current_user.home_address }}" placeholder="Street address, apartment, etc.">
+        </label>
+        <label>
+          Phone number (optional)
+          <input type="text" name="phone_number" value="{{ current_user.phone_number }}" placeholder="For buyers to contact you about orders">
+        </label>
+        <label>
+          New profile image
+          <input type="file" name="profile_image" accept="image/*">
+        </label>
+        <button type="submit" class="primary-button">Save changes</button>
+      </form>
 
-    <form method="post" action="{{ url_for('change_password') }}" class="stack-form">
-      <button type="button" id="password-toggle" class="secondary-button" style="margin-top:12px;">Change password</button>
-      <div id="password-panel" style="display:none; margin-top: 12px;">
-        <p class="muted-text">Fill these fields to change your password.</p>
-        <label>
-          Current password
-          <input type="password" name="current_password" autocomplete="current-password">
-        </label>
-        <label>
-          New password
-          <input type="password" name="new_password" autocomplete="new-password">
-        </label>
-        <label>
-          Confirm new password
-          <input type="password" name="confirm_password" autocomplete="new-password">
-        </label>
-        <button type="submit" class="primary-button">Change password</button>
-      </div>
-    </form>
+      <form method="post" action="{{ url_for('change_password') }}" class="stack-form">
+        <button type="button" id="password-toggle" class="secondary-button" style="margin-top:12px;">Change password</button>
+        <div id="password-panel" style="display:none; margin-top: 12px;">
+          <p class="muted-text">Fill these fields to change your password.</p>
+          <label>
+            Current password
+            <input type="password" name="current_password" autocomplete="current-password">
+          </label>
+          <label>
+            New password
+            <input type="password" name="new_password" autocomplete="new-password">
+          </label>
+          <label>
+            Confirm new password
+            <input type="password" name="confirm_password" autocomplete="new-password">
+          </label>
+          <button type="submit" class="primary-button">Change password</button>
+        </div>
+      </form>
+    </div>
 
     <script>
       document.addEventListener("DOMContentLoaded", () => {
-        const toggle = document.getElementById("password-toggle");
-        const panel = document.getElementById("password-panel");
-        if (!toggle || !panel) return;
-        toggle.addEventListener("click", () => {
-          const isHidden = panel.style.display === "none";
-          panel.style.display = isHidden ? "block" : "none";
-          toggle.textContent = isHidden ? "Hide password fields" : "Change password";
-        });
+        const profileToggle = document.getElementById("edit-profile-toggle");
+        const profilePanel = document.getElementById("profile-edit-panel");
+        const passwordToggle = document.getElementById("password-toggle");
+        const passwordPanel = document.getElementById("password-panel");
+
+        if (profileToggle && profilePanel) {
+          profileToggle.addEventListener("click", () => {
+            const isHidden = profilePanel.style.display === "none";
+            profilePanel.style.display = isHidden ? "block" : "none";
+            profileToggle.textContent = isHidden ? "Hide profile editor" : "Edit profile";
+          });
+        }
+
+        if (passwordToggle && passwordPanel) {
+          passwordToggle.addEventListener("click", () => {
+            const isHidden = passwordPanel.style.display === "none";
+            passwordPanel.style.display = isHidden ? "block" : "none";
+            passwordToggle.textContent = isHidden ? "Hide password fields" : "Change password";
+          });
+        }
       });
     </script>
   </article>

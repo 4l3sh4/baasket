@@ -10,7 +10,7 @@ def wire_standard_observers(
     *,
     step_delay_seconds: float = 10.0,
 ) -> tuple[ReceiptGeneratorObserver, AutomatedTrackingObserver]:
-    """Equivalent to Baasket.LogisticsV2.LogisticsV2Factory.WireStandardObservers."""
+    """Wires the standard LogisticsV2 observers onto a checkout session."""
     receipt_observer = ReceiptGeneratorObserver()
     tracking_observer = AutomatedTrackingObserver(step_delay_seconds=step_delay_seconds)
 

@@ -23,7 +23,7 @@
         <a href="{{ url_for('dashboard') }}">Dashboard</a>
         {% if not current_user.is_admin %}
           <a href="{{ url_for('sell') }}">Sell</a>
-          <a href="{{ url_for('orders_list') }}">Orders</a>
+          <a href="{{ url_for('purchases') }}">Purchases</a>
         {% endif %}
         <a href="{{ url_for('messages_inbox') }}">
           Messages
