@@ -723,66 +723,6 @@ def _liked_listings_for_user(user_id: int) -> list[Item]:
 	)
 
 
-def _seed_database() -> None:
-	if User.query.count() == 0:
-		demo_user = User()
-		demo_user.username = "baasket"
-		demo_user.email = "hello@baasket.local"
-		demo_user.bio = "Baasket demo storefront"
-		demo_user.set_password("baasket123")
-		demo_user.role = "user"
-		db.session.add(demo_user)
-		db.session.flush()
-	else:
-		demo_user = User.query.filter_by(username="baasket").first() or User.query.first()
-
-	# Demo catalog listings are intentionally not generated here — the
-	# database starts with no listings beyond whatever real users create.
-
-	# Seed a few reviews for the demo storefront so the seller + reviews
-	# sections on the listing page have real content. Reviews are keyed on
-	# seller_id, so a newly registered seller correctly starts with the
-	# "no reviews yet" empty state instead of fake numbers.
-	if demo_user is not None and Review.query.filter_by(seller_id=demo_user.id).count() == 0:
-		demo_reviewers = []
-		for username, email in (
-			("mei_ling87", "mei.ling@example.com"),
-			("arif_hassan", "arif.hassan@example.com"),
-			("teh_aiping", "teh.aiping@example.com"),
-		):
-			reviewer = User.query.filter_by(username=username).first()
-			if reviewer is None:
-				reviewer = User()
-				reviewer.username = username
-				reviewer.email = email
-				reviewer.bio = "Baasket shopper"
-				reviewer.set_password("baasket123")
-				db.session.add(reviewer)
-				db.session.flush()
-			demo_reviewers.append(reviewer)
-
-		demo_listings = Item.query.filter_by(seller_id=demo_user.id).order_by(Item.id).all()
-		seed_reviews = [
-			(5.0, "Item matched the photos exactly and the handover was quick.", 0, 2),
-			(4.5, "Good communication throughout, slightly late to the meetup but worth it.", 1, 10),
-			(5.0, "Second time buying from this seller \u2014 packaging was careful both times.", 2, 25),
-			(4.0, "Fair price and the listing description was accurate.", 0, 40),
-		]
-		for index, (rating, comment, reviewer_idx, days_ago) in enumerate(seed_reviews):
-			review = Review()
-			review.reviewID = uuid4().hex
-			review.ratingValue = rating
-			review.comment = comment
-			review.created_by = demo_reviewers[reviewer_idx % len(demo_reviewers)].id
-			review.seller_id = demo_user.id
-			if demo_listings:
-				review.listing_id = demo_listings[index % len(demo_listings)].id
-			review.created_at = datetime.utcnow() - timedelta(days=days_ago)
-			db.session.add(review)
-
-	db.session.commit()
-
-
 def _authorize_report_action(report_id: str) -> Report | None:
 	"""Shared guard for the two admin report-action routes: only the admin
 	a report was actually routed to may act on it, mirroring the filter
@@ -963,11 +903,6 @@ def create_app() -> Flask:
 				db.session.commit()
 
 		_backfill_shipping_buyer_ids()
-
-		# Seed demo data only after the schema is fully migrated, otherwise a
-		# pre-existing database (created before newer columns like
-		# review.seller_id existed) would fail here with "no such column".
-		_seed_database()
 
 	@app.get("/")
 	def index() -> ResponseReturnValue:
@@ -1663,11 +1598,8 @@ def create_app() -> Flask:
 			user.bio = bio
 			user.profile_image = profile_image or ""
 			user.set_password(password)
-			# The very first real account on the site automatically becomes the
-			# admin. The seeded demo "baasket" account (created on first app
-			# startup, see _seed_database) is deliberately excluded from this
-			# check, so admin status goes to the first person who actually signs
-			# up rather than the demo storefront.
+			# The very first account to register on the site automatically
+			# becomes the admin.
 			if User.query.filter_by(role="admin").first() is None:
 				user.role = "admin"
 			db.session.add(user)
