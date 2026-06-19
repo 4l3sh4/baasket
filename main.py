@@ -1113,6 +1113,7 @@ def create_app() -> Flask:
 			title=f"{profile_user.username} | Baasket",
 			profile_user=profile_user,
 			is_own_profile=current_user.is_authenticated and current_user.id == profile_user.id,
+			is_following=current_user.is_authenticated and current_user.id != profile_user.id and current_user.is_following(profile_user),
 			seller_stats=_seller_profile_stats(profile_user.id),
 			seller_reviews=_seller_reviews(profile_user.id, limit=20),
 			listings=current_listings,
@@ -1706,32 +1707,24 @@ def create_app() -> Flask:
 
 	@app.get("/seller/<int:user_id>")
 	def seller_profile(user_id: int) -> ResponseReturnValue:
-		user = db.session.get(User, user_id)
-		if user is None:
-			flash("That seller does not exist.", "warning")
-			return redirect(url_for("index"))
-
-		listings = Item.query.filter_by(seller_id=user_id).all()
-		reviews_count = 0
-
-		return render_template(
-			"seller_profile.html",
-			title=f"{user.username}'s Storefront | Baasket",
-			user=user,
-			listings=listings,
-			reviews_count=reviews_count,
-		)
+		"""Retired in favor of /users/<user_id> (user_profile), which renders
+		the same seller information plus ratings and reviews. Kept as a
+		redirect so old links/bookmarks still resolve."""
+		return redirect(url_for("user_profile", user_id=user_id), code=301)
 
 	@app.post("/seller/<int:user_id>/follow")
 	@login_required
 	def seller_follow(user_id: int) -> ResponseReturnValue:
+		fallback = url_for("user_profile", user_id=user_id)
+		destination = _safe_redirect_target(request.form.get("next"), fallback)
+
 		user = db.session.get(User, user_id)
 		if user is None:
 			flash("That seller does not exist.", "warning")
 			return redirect(url_for("index"))
 		if user.id == current_user.id:
 			flash("You cannot follow yourself.", "warning")
-			return redirect(url_for("seller_profile", user_id=user_id))
+			return redirect(destination)
 
 		if current_user.is_following(user):
 			current_user.unfollow(user)
@@ -1740,7 +1733,7 @@ def create_app() -> Flask:
 			current_user.follow(user)
 			flash(f"You are now following {user.username}.", "success")
 		db.session.commit()
-		return redirect(url_for("seller_profile", user_id=user_id))
+		return redirect(destination)
 
 	@app.route("/dashboard", methods=["GET", "POST"])
 	@login_required

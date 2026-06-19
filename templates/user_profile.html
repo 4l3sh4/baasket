@@ -14,6 +14,14 @@
       <p class="eyebrow">{{ "Your public profile" if is_own_profile else "Seller profile" }}</p>
       <h1>{{ profile_user.username }}</h1>
       <p>{{ profile_user.bio or "This user hasn't added a bio yet." }}</p>
+      {% if not is_own_profile and current_user.is_authenticated %}
+        <form method="post" action="{{ url_for('seller_follow', user_id=profile_user.id) }}" style="display:inline; margin: 4px 0 12px;">
+          <input type="hidden" name="next" value="{{ url_for('user_profile', user_id=profile_user.id) }}">
+          <button type="submit" class="secondary-button">
+            {% if is_following %}Unfollow{% else %}Follow{% endif %}
+          </button>
+        </form>
+      {% endif %}
       <div class="rating-row">
         {{ stars(seller_stats.rating_avg) }}
         <span class="subtle">

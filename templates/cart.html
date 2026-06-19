@@ -16,7 +16,7 @@
             <img src="{{ line.listing.image_data }}" alt="{{ line.listing.title }}">
             <div>
               <h3>{{ line.listing.title }}</h3>
-              <p>{{ line.listing.condition }} · {{ line.listing.deal_summary }} · <a href="{{ url_for('seller_profile', user_id=line.listing.seller_id) }}">{{ line.listing.seller_name }}</a></p>
+              <p>{{ line.listing.condition }} · {{ line.listing.deal_summary }} · <a href="{{ url_for('user_profile', user_id=line.listing.seller_id) }}">{{ line.listing.seller_name }}</a></p>
               <strong>{{ line.listing.price|money }}</strong>
               {% if line.listing.delivery_fee %}
                 <span class="field-hint"> + {{ line.listing.delivery_fee|money }} delivery</span>

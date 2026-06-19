@@ -126,6 +126,7 @@
 </section>
 
 <!-- ── Your listings ─────────────────────────────────────────────────────── -->
+{% if not current_user.is_admin %}
 <section class="section-block">
   <div class="section-heading">
     <div>
@@ -156,8 +157,10 @@
     {% endfor %}
   </div>
 </section>
+{% endif %}
 
 <!-- ── Reviews you've received ───────────────────────────────────────────── -->
+{% if not current_user.is_admin %}
 <section class="section-block">
   <div class="section-heading">
     <div>
@@ -204,8 +207,10 @@
     {% endfor %}
   </div>
 </section>
+{% endif %}
 
 <!-- ── Reviews you've made ───────────────────────────────────────────────── -->
+{% if not current_user.is_admin %}
 <section class="section-block">
   <div class="section-heading">
     <div>
@@ -252,8 +257,10 @@
     {% endfor %}
   </div>
 </section>
+{% endif %}
 
 <!-- ── Items you've liked ────────────────────────────────────────────────── -->
+{% if not current_user.is_admin %}
 <section class="section-block">
   <div class="section-heading">
     <div>
@@ -293,8 +300,10 @@
     {% endfor %}
   </div>
 </section>
+{% endif %}
 
 <!-- ── Sales history ─────────────────────────────────────────────────────── -->
+{% if not current_user.is_admin %}
 <section class="section-block">
   <div class="section-heading">
     <div>
@@ -321,4 +330,5 @@
     {% endfor %}
   </div>
 </section>
+{% endif %}
 {% endblock %}
