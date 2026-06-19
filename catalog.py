@@ -55,7 +55,7 @@ class ListingFactory:
             subcategory_id=str(payload.get("subcategory_id", payload.get("subcategory", ""))),
             title=str(payload["title"])[:100],
             price=Decimal(str(payload["price"])),
-            condition=str(payload.get("condition", ""))[:10],
+            condition=str(payload.get("condition", ""))[:15],
             listed_date=str(payload.get("listed_date", "")),
             description=str(payload.get("description", ""))[:1000],
             likes=max(0, int(payload.get("likes", 0))),
@@ -126,24 +126,3 @@ class CatalogRepository:
 
     def _sort_results(self, listings: list[Listing]) -> list[Listing]:
         return sorted(listings, key=lambda item: (item.price, item.title))
-
-
-def _build_art(title: str, accent_a: str, accent_b: str) -> str:
-    initials = "".join(part[0] for part in title.split()[:2]).upper()
-    svg = f"""
-    <svg xmlns='http://www.w3.org/2000/svg' width='800' height='600' viewBox='0 0 800 600'>
-      <defs>
-        <linearGradient id='paint' x1='0%' y1='0%' x2='100%' y2='100%'>
-          <stop offset='0%' stop-color='{accent_a}' />
-          <stop offset='100%' stop-color='{accent_b}' />
-        </linearGradient>
-      </defs>
-      <rect width='800' height='600' rx='48' fill='url(#paint)' />
-      <circle cx='660' cy='120' r='92' fill='rgba(255,255,255,0.18)' />
-      <circle cx='120' cy='470' r='128' fill='rgba(255,255,255,0.12)' />
-      <rect x='90' y='100' width='620' height='400' rx='40' fill='rgba(255,255,255,0.14)' stroke='rgba(255,255,255,0.28)' />
-      <text x='125' y='215' fill='white' font-size='120' font-family='Georgia, serif' font-weight='700'>{initials}</text>
-      <text x='125' y='300' fill='white' font-size='46' font-family='Trebuchet MS, sans-serif' letter-spacing='4'>{title}</text>
-    </svg>
-    """.strip()
-    return f"data:image/svg+xml;utf8,{quote(svg)}"

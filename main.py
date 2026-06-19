@@ -15,13 +15,13 @@ from werkzeug.utils import secure_filename
 from werkzeug.datastructures import ImmutableMultiDict
 from typing import TypedDict
 
-from catalog import _build_art
 from extensions import db, login_manager
 from models import DealMethod, Item, Like, ListingImage, Notification, Offer, ShippingItemModel, ShippingModel, User, ChatSession, Message, Review, ReviewImage, Report
 from notifications import build_notification_subject
 from logistics_v2.flask_adapter import run_checkout_logistics_v2
 from offers import OfferBoard, get_redeemable_offer
 from payment import PaymentReceipt, build_payment_gateway
+from catalog import ListingFactory
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -751,6 +751,7 @@ def create_app() -> Flask:
 	payment_gateway = build_payment_gateway()
 	offer_board = OfferBoard()
 	notification_subject = build_notification_subject()
+	listing_factory = ListingFactory()
 
 	@app.template_filter("money")
 	def money_filter(value: object) -> str:
@@ -1061,31 +1062,51 @@ def create_app() -> Flask:
 			flash("Admin accounts can't create listings.", "warning")
 			return redirect(url_for("index"))
 		if request.method == "POST":
-			title = request.form.get("title", "").strip()[:100]
-			category = request.form.get("category", "").strip()
-			subcategory = request.form.get("subcategory", "").strip()
+			raw_title = request.form.get("title", "").strip()
+			raw_category = request.form.get("category", "").strip()
+			raw_subcategory = request.form.get("subcategory", "").strip()
 			price_text = request.form.get("price", "").strip()
-			condition = request.form.get("condition", "").strip() or "Good"
-			condition = condition[:15]
-			description = request.form.get("description", "").strip()[:1000]
+			raw_condition = request.form.get("condition", "").strip() or "Good"
+			raw_description = request.form.get("description", "").strip()
 
-			if not title or not category or not price_text or not description:
+			if not raw_title or not raw_category or not price_text or not raw_description:
 				flash("Title, category, price, and description are required.", "warning")
 				return redirect(url_for("sell"))
 
-			if category not in VALID_CATEGORIES:
+			if raw_category not in VALID_CATEGORIES:
 				flash("Please select a valid category.", "warning")
 				return redirect(url_for("sell"))
 
-			valid_subs = CATEGORIES_MAP.get(category, [])
-			if valid_subs and subcategory not in valid_subs:
-				subcategory = ""
+			valid_subs = CATEGORIES_MAP.get(raw_category, [])
+			if valid_subs and raw_subcategory not in valid_subs:
+				raw_subcategory = ""
 
 			try:
-				price = float(price_text)
+				float(price_text)
 			except Exception:
 				flash("Enter a valid asking price.", "warning")
 				return redirect(url_for("sell"))
+
+			# Factory Pattern: hand the raw form fields to ListingFactory, which
+			# normalizes types (Decimal price), truncates to column limits, and
+			# applies defaults - the same normalization catalog.py's in-memory
+			# CatalogRepository relies on, reused here for the DB-backed listing.
+			normalized = listing_factory.create({
+				"id": uuid4().hex,
+				"seller_id": current_user.id,
+				"category_id": raw_category,
+				"subcategory_id": raw_subcategory,
+				"title": raw_title,
+				"price": price_text,
+				"condition": raw_condition,
+				"description": raw_description,
+			})
+			title = normalized.title
+			category = normalized.category_id
+			subcategory = normalized.subcategory_id
+			price = float(normalized.price)
+			condition = normalized.condition
+			description = normalized.description
 
 			# ── Deal methods ────────────────────────────────────────────────
 			deal_methods_payload = _parse_deal_methods_from_form(request.form, current_user.id)
@@ -1097,7 +1118,6 @@ def create_app() -> Flask:
 			if len(uploaded_files) > Item.MAX_IMAGES:
 				flash(f"You can upload up to {Item.MAX_IMAGES} images per listing — only the first {Item.MAX_IMAGES} were used.", "warning")
 			image_paths = _save_uploads(uploaded_files, LISTING_UPLOAD_DIR, Item.MAX_IMAGES)
-			seed_image_data = "" if image_paths else _build_art(title[:24] or category[:24] or "Listing", "#1f6f78", "#e26d5c")
 
 			listing = Item()
 			listing.seller_id = current_user.id
@@ -1108,7 +1128,7 @@ def create_app() -> Flask:
 			listing.condition = condition
 			listing.description = description
 			listing.image_path = ""
-			listing.seed_image_data = seed_image_data
+			listing.seed_image_data = ""
 			for position, image_path in enumerate(image_paths):
 				listing.images.append(ListingImage(image_path=image_path, position=position))
 			db.session.add(listing)
