@@ -75,7 +75,7 @@ class User(db.Model, UserMixin):
     def profile_image_url(self) -> str:
         if self.profile_image:
             return f"/static/{self.profile_image}"
-        return "/static/assets/logo/baasket_logo.png"
+        return "/static/assets/logo/avatar.png"
 
     @property
     def is_admin(self) -> bool:
@@ -198,7 +198,7 @@ class ListingModel(db.Model):
             return ordered[0].url
         if self.image_path:
             return f"/static/{self.image_path}"
-        return self.seed_image_data or "/static/assets/logo/baasket_logo.png"
+        return self.seed_image_data or "/static/assets/logo/avatar.png"
 
     @property
     def offer_count(self) -> int:
