@@ -2089,4 +2089,6 @@ if __name__ == "__main__":
 	# app.run(debug=True)
 	import os
 	port = int(os.environ.get("PORT", 5000))
-	app.run(debug=True, port=port)
+	# Reloader breaks VS Code/Cursor debugpy — keep it off unless explicitly enabled.
+	use_reloader = os.environ.get("FLASK_USE_RELOADER", "0") == "1"
+	app.run(debug=True, port=port, use_reloader=use_reloader)

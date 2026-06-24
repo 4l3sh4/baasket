@@ -34,7 +34,7 @@ class BasePaymentStrategy(ABC):
     code: str
     label: str
     fee_rate: Decimal = Decimal("0.00")
-
+# fee calculation
     def _build_receipt(self, subtotal: Decimal, message: str) -> PaymentReceipt:
         fee = (subtotal * self.fee_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         total = (subtotal + fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
